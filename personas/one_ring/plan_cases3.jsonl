@@ -1,0 +1,12 @@
+{"id":"bus","q":"My bus leaves at 7:15. The stop is 20 minutes away and I need 35 minutes for breakfast and a shower. What time should I wake up?","need":["6:20"],"avoid":[]}
+{"id":"movie","q":"The movie starts at 7:30pm, the drive is 45 minutes and dinner beforehand takes an hour. When should we start dinner?","need":["5:45"],"avoid":[]}
+{"id":"phone","q":"Phone plan A is 30 dollars a month with no fee. Plan B is 20 dollars a month plus a 150 dollar activation fee. Over 2 years, which is cheaper?","need":["720","630","B"],"avoid":[]}
+{"id":"tiles","q":"My floor is 8 meters by 5 meters. Tiles come in boxes that cover 6 square meters each and a box costs 25 dollars. How many boxes do I need and what will it cost?","need":["7|seven","175"],"avoid":[]}
+{"id":"reading","q":"My book has 360 pages and I read 15 pages a night. I have 3 weeks before book club. Will I finish?","need":["no|not|won't|short","24|315"],"avoid":[]}
+{"id":"party","q":"I'm hosting 18 people. Each cake serves 8 and costs 22 dollars. I've got 50 dollars. Is that enough?","need":["3|three","66","no|not|short|won't|isn't"],"avoid":[]}
+{"id":"commute","q":"I drive 28 miles each way to work, 5 days a week. My car gets 35 miles per gallon and gas is 3 dollars a gallon. What do I spend on gas a week?","need":["24"],"avoid":[]}
+{"id":"overlap","q":"My shift ends at 5:30 and the school pickup is at 5:45, 25 minutes away. Can I make it on time?","need":["no|not|won't|late","5:55|10 minutes"],"avoid":[]}
+{"id":"dragon","q":"In my game a dragon has 400 health. My 4 knights each hit for 15 a turn and my mage hits for 40. How many turns to kill it?","need":["4|four"],"avoid":[]}
+{"id":"ferry","q":"In my story, 3 knights and a horse need to cross a river. The boat carries 2 at a time and one must always row back. How many trips across does it take?","need":["5|five|7|seven"],"avoid":[]}
+{"id":"split","q":"Dinner was 138 dollars for 6 of us, plus a 20 percent tip. How much does each person owe?","need":["27\\.60|27\\.6"],"avoid":[]}
+{"id":"garrison","q":"In my game I have 40 soldiers guarding 3 gates. Each gate needs at least 15. Can I cover them all?","need":["no|not|can't|cannot|short","45|5"],"avoid":[]}

@@ -27,7 +27,7 @@ system = with_memory(load_system("one_ring"), [])
 EVERYDAY, LORE = 0, 1
 
 
-def complete(prompt, adapter=None, temperature=0.2, max_tokens=150, stop=None):
+def complete(prompt, adapter=None, temperature=0.2, max_tokens=150, stop=None, strip=True):
     payload = {
         "prompt": prompt, "n_predict": max_tokens, "temperature": temperature, "top_p": 0.9, "repeat_penalty": 1.05, "seed": 7,
         "cache_prompt": False, "stop": stop or [],
@@ -36,7 +36,7 @@ def complete(prompt, adapter=None, temperature=0.2, max_tokens=150, stop=None):
     request = urllib.request.Request(f"http://127.0.0.1:{args.port}/completion", json.dumps(payload).encode(), {"Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=600) as response:
         result = json.load(response)
-    return result["content"].strip(), result["timings"]["predicted_n"]
+    return (result["content"].strip() if strip else result["content"]), result["timings"]["predicted_n"]
 
 
 def render(prompt_system, messages, thinking=False):
@@ -82,11 +82,18 @@ def run(mode, messages):
         adapter = EVERYDAY if mode == "work_voice" else None
         reply, second = complete(render(f"{system}\n\n{VOICE_NOTE}{work}", messages), adapter, 0.3)
         return reply, first + second, work
-    if mode == "planner":
-        work, first = complete(render(planner.WORK_SYSTEM, planner.work_messages(messages)), max_tokens=planner.WORK_TOKENS, temperature=0.0)
+    if mode in ("planner", "planner_nocheck"):
+        def generate(prompt, max_tokens):
+            return complete(prompt, max_tokens=max_tokens, temperature=0.0, strip=False)
+
+        if mode == "planner":
+            work, first, fixes = planner.work_with_sums(generate, render(planner.WORK_SYSTEM, planner.work_messages(messages)), messages[-1]["content"])
+        else:
+            work, first = generate(render(planner.WORK_SYSTEM, planner.work_messages(messages)), planner.WORK_TOKENS)
+            fixes = []
         voiced, second = complete(render(f"{system}\n\n{planner.VOICE_NOTE}{work}", messages), EVERYDAY, 0.3)
         reply, why = planner.final_reply(voiced, work, messages)
-        return reply, first + second, f"{work} || VOICED: {voiced} || REPLACED: {why}"
+        return reply, first + second, f"{work} || FIXED: {fixes} || VOICED: {voiced} || REPLACED: {why}"
     if mode == "one_pass":
         text, count = complete(render(system + ONE_PASS, messages), max_tokens=260, temperature=0.0)
         return text.split("SAY:")[-1].strip(), count, text
@@ -119,7 +126,7 @@ for case in cases:
         entry["most"] = max(entry["most"], count)
         print(f"  {'ok  ' if ok else 'MISS'} {mode} ({count} tok): {reply}")
         if args.show and working:
-            print("       working: " + working.replace("\n", " / ")[:500])
+            print("       working: " + working.replace("\n", " / ")[:1200])
 print("\nmode: passed, average tokens, most tokens, average seconds here")
 for mode, entry in totals.items():
     print(f"  {mode}: {entry['pass']}/{len(cases)}, {entry['tokens'] / len(cases):.0f}, {entry['most']}, {entry['seconds'] / len(cases):.1f}")

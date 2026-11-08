@@ -160,15 +160,18 @@ def work_out(messages, temperature, max_new_tokens, notes):
     window = recent(messages)
     started = time.time()
     with gpu_lock:
-        work = llama.complete(render_prompt(tokenizer, planner.WORK_SYSTEM, planner.work_messages(window)), None, 0.0, planner.WORK_TOKENS)
-        tokens_used = llama.last_tokens
+        def generate(prompt, max_tokens):
+            text = llama.complete(prompt, None, 0.0, max_tokens)
+            return text, llama.last_tokens
+
+        work, tokens_used, fixes = planner.work_with_sums(generate, render_prompt(tokenizer, planner.WORK_SYSTEM, planner.work_messages(window)), messages[-1]["content"])
         voice_system = f"{with_memory(system, notes)}\n\n{planner.VOICE_NOTE}{work}"
         voiced = llama.complete(fit_prompt(voice_system, window), "everyday", min(temperature, 0.3), max_new_tokens)
         tokens_used += llama.last_tokens
     reply, replaced = planner.final_reply(voiced, work, messages)
     total = time.time() - started
     stats = {"tokens": tokens_used, "first_token_s": round(total, 2), "total_s": round(total, 2), "tokens_per_s": round(tokens_used / total, 1)}
-    return reply, work.strip(), voiced.strip(), replaced, stats
+    return reply, work.strip(), voiced.strip(), replaced, fixes, stats
 
 
 def stream_reply(messages, tuned, temperature, max_new_tokens, passages, notes):
@@ -347,7 +350,7 @@ class Handler(BaseHTTPRequestHandler):
         if tuned and not passages and planner.is_plan(asked):
             send({"thinking": random.choice(planner.THINKING_LINES)})
             try:
-                reply, work, voiced, replaced, stats = work_out(messages, temperature, max_new_tokens, notes)
+                reply, work, voiced, replaced, fixes, stats = work_out(messages, temperature, max_new_tokens, notes)
             except OSError as error:
                 send({"error": str(error)})
                 record("plan", "", error=str(error))
@@ -355,7 +358,7 @@ class Handler(BaseHTTPRequestHandler):
             send({"working": work})
             send({"text": reply})
             send({"done": stats})
-            record("plan", reply, memory=notes or [], working=work, voiced=voiced, replaced=replaced, stats=stats)
+            record("plan", reply, memory=notes or [], working=work, voiced=voiced, replaced=replaced, sum_fixes=fixes, stats=stats)
             self.take_notes(latest, who, send, in_story)
             return
         route = ("lore" if passages else "everyday") if tuned else "untuned"
