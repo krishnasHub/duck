@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Duck Test Bench</title>
+<style>
+:root {
+  --bg: #f4f6f7; --panel: #ffffff; --ink: #17242b; --muted: #55666f; --line: #d3dce0;
+  --duck: #ffcf24; --on-duck: #2a2100; --water: #0b6b86; --you: #e3eef2; --plain: #eceff1; --bad: #a33a2a; --good: #1b7a4b;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #10191e; --panel: #18242a; --ink: #e8eff2; --muted: #9db0b9; --line: #2f3f47;
+    --duck: #ffd84d; --on-duck: #2a2100; --water: #62c6e0; --you: #1f3640; --plain: #222f35; --bad: #f08f7e; --good: #62cf97;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.5 "Segoe UI", system-ui, sans-serif; }
+.app { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 19rem; }
+.chat { min-height: 0; min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+header { padding: .8rem 1.25rem; border-bottom: 1px solid var(--line); display: flex; gap: .75rem; align-items: baseline; flex-wrap: wrap; }
+h1 { font-size: 1.15rem; margin: 0; }
+.sub { color: var(--muted); font-size: .85rem; }
+#log { overflow-y: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+.empty { color: var(--muted); margin: auto; text-align: center; max-width: 30rem; }
+.msg { display: grid; gap: .3rem; max-width: 46rem; min-width: 0; }
+.msg.user { align-self: flex-end; }
+.who { font-size: .75rem; font-weight: 600; color: var(--muted); }
+.bubble { padding: .6rem .85rem; border-radius: .6rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.user .bubble { background: var(--you); }
+.tuned .bubble { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--duck); }
+.untuned .bubble { background: var(--plain); }
+.stats { font: 12px Consolas, monospace; color: var(--muted); }
+.row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+button { font: inherit; font-size: .9rem; padding: .35rem .75rem; border-radius: .4rem; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--water); }
+button:disabled { opacity: .55; cursor: default; }
+#talk.on { background: var(--bad); color: #fff; border-color: var(--bad); }
+button.primary { background: var(--duck); color: var(--on-duck); border-color: var(--duck); font-weight: 600; }
+button.link { border: 0; background: none; color: var(--water); padding: 0; font-size: .8rem; text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--water); outline-offset: 2px; }
+form { padding: .8rem 1.25rem; border-top: 1px solid var(--line); display: flex; gap: .6rem; align-items: flex-end; }
+textarea { font: inherit; width: 100%; padding: .55rem .7rem; border-radius: .4rem; border: 1px solid var(--line); background: var(--panel); color: var(--ink); resize: vertical; }
+aside { border-left: 1px solid var(--line); background: var(--panel); padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1.1rem; }
+aside h2 { font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+label { display: block; font-size: .9rem; }
+.choice { display: flex; gap: .45rem; align-items: center; padding: .1rem 0; }
+input[type=range], input[type=number] { width: 100%; }
+input[type=number] { font: inherit; padding: .25rem .4rem; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: .35rem; }
+.prompts { display: grid; gap: .3rem; }
+.prompts button { text-align: left; font-size: .82rem; }
+details { font-size: .85rem; color: var(--muted); }
+summary { cursor: pointer; }
+.error { color: var(--bad); }
+.saved { color: var(--good); font-size: .8rem; }
+.notes { list-style: none; margin: 0 0 .5rem; padding: 0; display: grid; gap: .3rem; font-size: .82rem; }
+.notes li { display: flex; gap: .4rem; justify-content: space-between; align-items: baseline; }
+.notes .none { color: var(--muted); }
+@media (max-width: 800px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  aside { border-left: 0; border-top: 1px solid var(--line); max-height: 35vh; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <main class="chat">
+    <header>
+      <h1>Duck Test Bench</h1>
+      <span class="sub" id="meta">Loading...</span>
+      <span class="sub" id="privacy">Local only.</span>
+    </header>
+    <div id="log" aria-live="polite">
+      <div class="empty" id="empty">Say something to the duck, or pick a test prompt. Use "Both" to compare the tuned duck with the untuned model.</div>
+    </div>
+    <form id="form">
+      <textarea id="input" rows="2" placeholder="Talk to the duck. Enter sends, Shift+Enter starts a new line." aria-label="Your message"></textarea>
+      <button id="talk" type="button" hidden aria-label="Hold to talk">Hold to talk</button>
+      <button class="primary" id="send" type="submit">Send</button>
+    </form>
+  </main>
+  <aside>
+    <section>
+      <h2>Who answers</h2>
+      <label class="choice"><input type="radio" name="mode" value="tuned" checked> Tuned duck</label>
+      <label class="choice"><input type="radio" name="mode" value="untuned"> Untuned model</label>
+      <label class="choice"><input type="radio" name="mode" value="both"> Both</label>
+    </section>
+    <section id="voicePanel" hidden>
+      <h2>Voice</h2>
+      <label class="choice"><input type="checkbox" id="speak"> Speak his replies</label>
+      <div class="stats" id="voiceStatus"></div>
+    </section>
+    <section>
+      <h2>Lore</h2>
+      <label class="choice"><input type="checkbox" id="lore"> <span id="loreLabel">Use the lore library</span></label>
+    </section>
+    <section>
+      <h2>Settings</h2>
+      <label for="temperature">Temperature: <span id="tempValue">0.4</span></label>
+      <input id="temperature" type="range" min="0" max="1.5" step="0.1" value="0.4">
+      <label for="maxTokens">Longest reply, in tokens</label>
+      <input id="maxTokens" type="number" min="1" max="400" value="150">
+    </section>
+    <section>
+      <button id="reset" type="button">New conversation</button>
+    </section>
+    <section id="memoryPanel" hidden>
+      <h2>What he remembers</h2>
+      <ul class="notes" id="notes"></ul>
+      <div class="row">
+        <button id="forget" type="button">Forget everything</button>
+        <button id="forgetYes" type="button" hidden>Yes, forget it all</button>
+        <button id="forgetNo" type="button" hidden>Keep</button>
+      </div>
+    </section>
+    <section>
+      <h2>Test prompts</h2>
+      <div class="prompts" id="prompts"></div>
+    </section>
+    <section>
+      <details><summary>Persona prompt</summary><p id="system"></p></details>
+    </section>
+  </aside>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const log = $("log");
+let history = [];
+let busy = false;
+const newSession = () => new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14) + "-" + Math.random().toString(36).slice(2, 6);
+let session = newSession();
+// Add ?by=claude to the address so automated tests can be told apart from real chats in the logs.
+const by = new URLSearchParams(location.search).get("by") || "user";
+
+async function loadNotes(notes) {
+  if ($("memoryPanel").hidden) return;
+  if (!notes) notes = (await (await fetch("/api/memory")).json()).notes;
+  $("notes").replaceChildren();
+  if (!notes.length) {
+    const none = document.createElement("li");
+    none.className = "none";
+    none.textContent = "Nothing yet.";
+    $("notes").append(none);
+  }
+  for (const note of notes) {
+    const item = document.createElement("li");
+    const text = document.createElement("span");
+    text.textContent = note.text;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "link";
+    remove.textContent = "Forget";
+    remove.setAttribute("aria-label", "Forget: " + note.text);
+    remove.addEventListener("click", async () => {
+      const response = await fetch("/api/memory/delete", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: note.id }),
+      });
+      loadNotes((await response.json()).notes);
+    });
+    item.append(text, remove);
+    $("notes").append(item);
+  }
+}
+
+function addNote(target, text) {
+  const note = document.createElement("div");
+  note.className = "stats";
+  note.textContent = text;
+  target.msg.append(note);
+}
+
+async function speak(text) {
+  if (!$("speak").checked || !text) return;
+  try {
+    const response = await fetch("/api/speak", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
+    });
+    if (!response.ok) throw new Error((await response.json()).error);
+    const url = URL.createObjectURL(await response.blob());
+    const audio = new Audio(url);
+    audio.addEventListener("ended", () => URL.revokeObjectURL(url));
+    await audio.play();
+  } catch (error) {
+    $("voiceStatus").textContent = "Couldn't speak: " + error.message;
+  }
+}
+
+let recorder = null;
+let holding = false;
+let noMic = false;
+
+// A browser only lists a microphone if the computer has one, even before permission is given.
+async function checkMic() {
+  if ($("voicePanel").hidden) return;
+  let found = false;
+  try {
+    found = (await navigator.mediaDevices.enumerateDevices()).some(device => device.kind === "audioinput");
+  } catch {
+    found = false;
+  }
+  noMic = !found;
+  $("talk").disabled = busy || noMic;
+  $("talk").textContent = noMic ? "No mic found" : "Hold to talk";
+  $("talk").setAttribute("aria-label", noMic ? "No microphone found" : "Hold to talk");
+  $("voiceStatus").textContent = noMic ? "No microphone found. You can still type, and he can still speak. Plug one in and this button will wake up." : "";
+}
+
+async function startTalking() {
+  if (busy || recorder || noMic || holding) return;
+  holding = true;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // The button may have been let go while the browser was asking for permission.
+    if (!holding) {
+      stream.getTracks().forEach(track => track.stop());
+      $("voiceStatus").textContent = "Microphone ready. Hold the button while you speak.";
+      return;
+    }
+    const chunks = [];
+    recorder = new MediaRecorder(stream);
+    recorder.addEventListener("dataavailable", event => chunks.push(event.data));
+    recorder.addEventListener("stop", async () => {
+      stream.getTracks().forEach(track => track.stop());
+      recorder = null;
+      $("voiceStatus").textContent = "Listening back...";
+      try {
+        const response = await fetch("/api/hear", { method: "POST", body: new Blob(chunks) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+        $("voiceStatus").textContent = result.text ? `Heard in ${result.seconds}s` : "I didn't catch any words.";
+        if (result.text) send(result.text);
+      } catch (error) {
+        $("voiceStatus").textContent = "Couldn't hear that: " + error.message;
+      }
+    });
+    recorder.start();
+    $("talk").classList.add("on");
+    $("voiceStatus").textContent = "Recording. Let go when you're done.";
+  } catch (error) {
+    recorder = null;
+    holding = false;
+    $("voiceStatus").textContent = "Couldn't use the microphone: " + error.message;
+  }
+}
+
+function stopTalking() {
+  holding = false;
+  $("talk").classList.remove("on");
+  if (recorder && recorder.state === "recording") recorder.stop();
+}
+
+function setBusy(value) {
+  busy = value;
+  $("send").disabled = value;
+  $("talk").disabled = value || noMic;
+  $("reset").disabled = value;
+  document.querySelectorAll(".prompts button, .fix").forEach(button => { button.disabled = value; });
+}
+
+function add(cls, who) {
+  $("empty")?.remove();
+  const msg = document.createElement("div");
+  msg.className = "msg " + cls;
+  const label = document.createElement("div");
+  label.className = "who";
+  label.textContent = who;
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  msg.append(label, bubble);
+  log.append(msg);
+  log.scrollTop = log.scrollHeight;
+  return { msg, bubble };
+}
+
+async function ask(messages, tuned, target) {
+  const response = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messages, tuned, session, by,
+      lore: $("lore").checked,
+      temperature: Number($("temperature").value),
+      max_new_tokens: Number($("maxTokens").value),
+    }),
+  });
+  if (!response.ok) throw new Error((await response.json()).error || "The server refused the request.");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "", text = "", done = null;
+  while (true) {
+    const { value, done: finished } = await reader.read();
+    if (finished) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const item = JSON.parse(line);
+      if (item.error) throw new Error(item.error);
+      if (item.passages) showPassages(target, item.passages);
+      if (item.safety) {
+        const note = document.createElement("div");
+        note.className = "stats";
+        note.textContent = "Safety response: fixed text from the crisis checks, not written by the model.";
+        target.msg.append(note);
+      }
+      if (item.guard) {
+        const note = document.createElement("div");
+        note.className = "stats";
+        note.textContent = "Companion check: fixed line, not written by the model.";
+        target.msg.append(note);
+      }
+      if (item.text) {
+        text += item.text;
+        target.bubble.textContent = text;
+        log.scrollTop = log.scrollHeight;
+      }
+      if (item.done) done = item.done;
+      if (item.remembered) addNote(target, "Remembered: " + item.remembered.join("; "));
+      if (item.thinking) target.bubble.textContent = item.thinking;
+      if (item.working) showWorking(target, item.working);
+      if (item.noted) {
+        addNote(target, "Noted: " + item.noted.join("; "));
+        loadNotes();
+      }
+    }
+  }
+  text = text.trim();
+  target.bubble.textContent = text;
+  if (done) {
+    const stats = document.createElement("div");
+    stats.className = "stats";
+    const speed = done.tokens_per_s === null ? "" : ` · ${done.tokens_per_s} tokens/s`;
+    stats.textContent = `first text ${done.first_token_s}s · total ${done.total_s}s · ${done.tokens} tokens${speed}`;
+    target.msg.append(stats);
+  }
+  return text;
+}
+
+function showWorking(target, working) {
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = "His private working";
+  const entry = document.createElement("p");
+  entry.style.whiteSpace = "pre-wrap";
+  entry.textContent = working;
+  details.append(summary, entry);
+  target.msg.append(details);
+}
+
+function showPassages(target, passages) {
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = `Lore used: ${passages.length} passages`;
+  details.append(summary);
+  for (const passage of passages) {
+    const entry = document.createElement("p");
+    const name = document.createElement("strong");
+    name.textContent = passage.title + (passage.section ? " · " + passage.section : "");
+    entry.append(name, document.createTextNode(": " + passage.text));
+    details.append(entry);
+  }
+  target.msg.append(details);
+}
+
+function addFixer(target, context, reply) {
+  const row = document.createElement("div");
+  row.className = "row";
+  const fix = document.createElement("button");
+  fix.type = "button";
+  fix.className = "link fix";
+  fix.textContent = "Correct this reply";
+  fix.addEventListener("click", () => {
+    row.replaceChildren();
+    const editor = document.createElement("textarea");
+    editor.rows = 3;
+    editor.value = reply;
+    editor.setAttribute("aria-label", "Corrected reply");
+    const save = document.createElement("button");
+    save.type = "button";
+    save.textContent = "Save as training example";
+    const note = document.createElement("span");
+    note.className = "saved";
+    save.addEventListener("click", async () => {
+      save.disabled = true;
+      try {
+        const response = await fetch("/api/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: [...context, { role: "assistant", content: editor.value }], session, by }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+        note.className = "saved";
+        note.textContent = "Saved to " + result.saved_to;
+      } catch (error) {
+        note.className = "error";
+        note.textContent = "Not saved: " + error.message;
+        save.disabled = false;
+      }
+    });
+    row.append(editor, save, note);
+    editor.focus();
+  });
+  row.append(fix);
+  target.msg.append(row);
+}
+
+async function send(text) {
+  text = text.trim();
+  if (!text || busy) return;
+  setBusy(true);
+  add("user", "You").bubble.textContent = text;
+  const context = [...history, { role: "user", content: text }];
+  const mode = document.querySelector("input[name=mode]:checked").value;
+  try {
+    let main = "";
+    if (mode !== "untuned") {
+      const target = add("tuned", "Tuned duck");
+      main = await ask(context, true, target);
+      addFixer(target, context, main);
+    }
+    if (mode !== "tuned") {
+      const label = mode === "both" ? "Untuned model (not kept in the conversation)" : "Untuned model";
+      const target = add("untuned", label);
+      const plain = await ask(context, false, target);
+      if (mode === "untuned") main = plain;
+      addFixer(target, context, plain);
+    }
+    history = [...context, { role: "assistant", content: main }];
+    speak(main);
+  } catch (error) {
+    const failed = add("error", "Error");
+    failed.bubble.textContent = error.message;
+    failed.bubble.classList.add("error");
+  }
+  setBusy(false);
+  $("input").focus();
+}
+
+$("form").addEventListener("submit", event => {
+  event.preventDefault();
+  const text = $("input").value;
+  $("input").value = "";
+  send(text);
+});
+$("input").addEventListener("keydown", event => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    $("form").requestSubmit();
+  }
+});
+$("talk").addEventListener("pointerdown", startTalking);
+$("talk").addEventListener("pointerup", stopTalking);
+$("talk").addEventListener("pointerleave", stopTalking);
+$("talk").addEventListener("keydown", event => { if (event.key === " " && !event.repeat) { event.preventDefault(); startTalking(); } });
+$("talk").addEventListener("keyup", event => { if (event.key === " ") { event.preventDefault(); stopTalking(); } });
+$("temperature").addEventListener("input", event => { $("tempValue").textContent = event.target.value; });
+$("forget").addEventListener("click", () => {
+  $("forget").hidden = true;
+  $("forgetYes").hidden = $("forgetNo").hidden = false;
+});
+$("forgetNo").addEventListener("click", () => {
+  $("forget").hidden = false;
+  $("forgetYes").hidden = $("forgetNo").hidden = true;
+});
+$("forgetYes").addEventListener("click", async () => {
+  const response = await fetch("/api/memory/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  loadNotes((await response.json()).notes);
+  $("forgetNo").click();
+});
+$("reset").addEventListener("click", () => {
+  history = [];
+  session = newSession();
+  log.replaceChildren();
+  const empty = document.createElement("div");
+  empty.className = "empty";
+  empty.id = "empty";
+  empty.textContent = "New conversation. He keeps his notes about you, but not this chat's wording.";
+  log.append(empty);
+});
+
+fetch("/api/info").then(response => response.json()).then(info => {
+  $("meta").textContent = `${info.persona} · ${info.base}`;
+  $("system").textContent = info.system;
+  $("privacy").textContent = info.logging ? `Local only. Chats are logged on this PC in ${info.log_folder}.` : "Local only. Logging is off.";
+  if (info.voice) {
+    $("voicePanel").hidden = false;
+    $("talk").hidden = false;
+    checkMic();
+    navigator.mediaDevices.addEventListener("devicechange", checkMic);
+  }
+  if (info.memory) {
+    $("memoryPanel").hidden = false;
+    loadNotes();
+  }
+  if (info.library_passages) {
+    $("lore").checked = true;
+    $("loreLabel").textContent = `Use the lore library (${info.library_passages} passages)`;
+  } else {
+    $("lore").disabled = true;
+    $("loreLabel").textContent = "Lore library isn't built yet";
+  }
+  if (!info.has_adapter) {
+    document.querySelector("input[value=untuned]").checked = true;
+    document.querySelector("input[value=tuned]").disabled = true;
+    document.querySelector("input[value=both]").disabled = true;
+    document.querySelector("input[value=untuned]").parentElement.lastChild.textContent = " Persona prompt only (not tuned yet)";
+  }
+  for (const prompt of info.prompts) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = prompt;
+    button.addEventListener("click", () => send(prompt));
+    $("prompts").append(button);
+  }
+}).catch(() => { $("meta").textContent = "Couldn't reach the local server."; });
+</script>
+</body>
+</html>

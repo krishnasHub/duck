@@ -1,0 +1,35 @@
+# This repo is public and holds code only. Everything below stays on the PC.
+.venv/
+__pycache__/
+*.pyc
+
+# Large downloads and build output
+models/
+runs/
+tools/
+*.gguf
+*.npy
+
+# Private: conversations and notes about the user
+logs/
+memory/
+
+# Local revert copies
+snapshots/
+
+# Source text and working documents
+lore/
+notes/
+docs/
+CLAUDE.md
+TODO.md
+
+# Personas: only the prompts and test prompts the code needs, not training data
+personas/*/*
+!personas/*/system.txt
+!personas/*/search_hint.txt
+!personas/*/lore_flourishes.txt
+!personas/*/eval*.txt
+!personas/*/plan_cases*.jsonl
+!personas/*/replay_*.txt
+personas/*/replay_*user*
