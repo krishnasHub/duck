@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Duck Vision Bench</title>
+<style>
+:root {
+  --bg: #f4f6f7; --panel: #ffffff; --ink: #17242b; --muted: #55666f; --line: #d3dce0;
+  --duck: #ffcf24; --on-duck: #2a2100; --water: #0b6b86; --bad: #a33a2a; --good: #1b7a4b;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #10191e; --panel: #18242a; --ink: #e8eff2; --muted: #9db0b9; --line: #2f3f47;
+    --duck: #ffd84d; --on-duck: #2a2100; --water: #62c6e0; --bad: #f08f7e; --good: #62cf97;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 "Segoe UI", system-ui, sans-serif; }
+header { padding: .8rem 1.25rem; border-bottom: 1px solid var(--line); display: flex; gap: .75rem; align-items: baseline; flex-wrap: wrap; }
+h1 { font-size: 1.15rem; margin: 0; }
+.sub { color: var(--muted); font-size: .85rem; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 19rem; gap: 1rem; padding: 1rem 1.25rem; align-items: start; }
+.stage { background: #000; border-radius: .5rem; overflow: hidden; line-height: 0; }
+canvas { display: block; max-width: 100%; max-height: calc(100vh - 6rem); width: auto; height: auto; margin: 0 auto; }
+aside { background: var(--panel); border: 1px solid var(--line); border-radius: .5rem; padding: 1rem; display: grid; gap: 1rem; }
+h2 { font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+.row { display: flex; gap: .5rem; flex-wrap: wrap; }
+button, .file { font: inherit; font-size: .9rem; padding: .35rem .75rem; border-radius: .4rem; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+button:hover:not(:disabled), .file:hover { border-color: var(--water); }
+button:disabled { opacity: .55; cursor: default; }
+button.primary { background: var(--duck); color: var(--on-duck); border-color: var(--duck); font-weight: 600; }
+button.stop { background: var(--bad); color: #fff; border-color: var(--bad); font-weight: 600; width: 100%; }
+:focus-visible { outline: 2px solid var(--water); outline-offset: 2px; }
+.file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.stats { font: 12px Consolas, monospace; color: var(--muted); }
+.meter { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) 3rem; gap: .5rem; align-items: center; font-size: .85rem; }
+.track { position: relative; height: .6rem; background: var(--bg); border: 1px solid var(--line); border-radius: .3rem; }
+.fill { position: absolute; top: 0; bottom: 0; background: var(--water); border-radius: .3rem; }
+.value { font: 12px Consolas, monospace; text-align: right; }
+#state { font-weight: 600; }
+.error { color: var(--bad); font-size: .85rem; }
+@media (max-width: 800px) { main { grid-template-columns: minmax(0, 1fr); padding: 1rem; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Duck Vision Bench</h1>
+  <span class="sub">Local only. Frames are looked at and thrown away, and nothing is saved.</span>
+</header>
+<main>
+  <div class="stage"><canvas id="view" width="960" height="540" aria-label="Camera view with detection boxes"></canvas></div>
+  <aside>
+    <section>
+      <h2>Source</h2>
+      <div class="row">
+        <button class="primary" id="photo" type="button">Test photo</button>
+        <button id="camera" type="button">Camera</button>
+        <label class="file">Video file<input id="file" type="file" accept="video/*"></label>
+      </div>
+      <p class="stats" id="sourceNote">The test photo stands in for a turning camera: the steering moves the view.</p>
+    </section>
+    <section>
+      <h2>He sees</h2>
+      <div id="sees">Nothing yet.</div>
+    </section>
+    <section>
+      <h2>Steering</h2>
+      <div id="state">Idle</div>
+      <div class="stats" id="note">&nbsp;</div>
+      <div class="meter"><span>Pan</span><div class="track"><div class="fill" id="panBar"></div></div><span class="value" id="panValue">0.00</span></div>
+      <div class="meter"><span>Forward</span><div class="track"><div class="fill" id="forwardBar"></div></div><span class="value" id="forwardValue">0.00</span></div>
+    </section>
+    <section>
+      <button class="stop" id="halt" type="button">Stop following</button>
+    </section>
+    <section>
+      <h2>Speed</h2>
+      <div class="stats" id="speed">Not running.</div>
+      <div class="error" id="error"></div>
+    </section>
+  </aside>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const view = $("view");
+const pen = view.getContext("2d");
+const grab = document.createElement("canvas");
+const GRAB_WIDTH = 640;
+const PHOTO_VIEW = 0.55; // the turning camera sees this share of the photo's width
+const PAN_SPEED = 0.25; // share of the photo per second at full pan
+const video = document.createElement("video");
+video.muted = true;
+video.playsInline = true;
+video.loop = true;
+
+let source = null; // "photo", or "video" for a camera or file
+let photo = null;
+let panAt = 0;
+let last = null;
+let halted = false;
+let run = 0;
+let framesDone = 0;
+let rateFrom = performance.now();
+let rate = 0;
+
+function sourceSize() {
+  return source === "photo" ? [photo.naturalWidth, photo.naturalHeight] : [video.videoWidth, video.videoHeight];
+}
+
+// Copy the current picture to a canvas. For the test photo, this is where the virtual camera points.
+function draw(target, width) {
+  const [w, h] = sourceSize();
+  if (!w) return false;
+  if (source === "photo") {
+    const seen = w * PHOTO_VIEW;
+    target.width = width;
+    target.height = Math.round(width * h / seen);
+    target.getContext("2d").drawImage(photo, panAt * (w - seen), 0, seen, h, 0, 0, target.width, target.height);
+  } else {
+    target.width = width;
+    target.height = Math.round(width * h / w);
+    target.getContext("2d").drawImage(video, 0, 0, target.width, target.height);
+  }
+  return true;
+}
+
+function overlay() {
+  if (!source || !draw(view, 960)) return;
+  if (!last) return;
+  pen.lineWidth = 3;
+  pen.font = "600 16px Segoe UI, sans-serif";
+  for (const box of last.boxes) {
+    const [x, y, w, h] = [box.x1 * view.width, box.y1 * view.height, (box.x2 - box.x1) * view.width, (box.y2 - box.y1) * view.height];
+    pen.strokeStyle = "#62c6e0";
+    pen.strokeRect(x, y, w, h);
+    const text = `${box.label.replace(/_/g, " ")} ${Math.round(box.score * 100)}%`;
+    pen.fillStyle = "rgba(0,0,0,.7)";
+    pen.fillRect(x, Math.max(0, y - 22), pen.measureText(text).width + 10, 22);
+    pen.fillStyle = "#fff";
+    pen.fillText(text, x + 5, Math.max(16, y - 6));
+  }
+  if (last.target) {
+    const t = last.target;
+    pen.strokeStyle = "#ffcf24";
+    pen.lineWidth = 5;
+    pen.strokeRect((t.cx - t.w / 2) * view.width, (t.cy - t.h / 2) * view.height, t.w * view.width, t.h * view.height);
+  }
+}
+
+function showBar(bar, value, centred) {
+  if (centred) {
+    bar.style.left = `${50 + Math.min(value, 0) * 50}%`;
+    bar.style.width = `${Math.abs(value) * 50}%`;
+  } else {
+    bar.style.left = "0";
+    bar.style.width = `${value * 100}%`;
+  }
+}
+
+const STATES = {
+  idle: "Idle", confirming: "Confirming someone is there", following: "Following", hidden: "Waiting: they're hidden",
+  searching: "Looking for them", halted: "Stopped", stale: "No frames: stopped",
+};
+
+function show(result) {
+  const { command } = result;
+  $("sees").textContent = result.sees;
+  $("state").textContent = STATES[command.state] || command.state;
+  $("note").textContent = command.note || " ";
+  showBar($("panBar"), command.pan, true);
+  showBar($("forwardBar"), command.forward, false);
+  $("panValue").textContent = command.pan.toFixed(2);
+  $("forwardValue").textContent = command.forward.toFixed(2);
+  framesDone += 1;
+  const now = performance.now();
+  if (now - rateFrom > 1000) {
+    rate = framesDone * 1000 / (now - rateFrom);
+    framesDone = 0;
+    rateFrom = now;
+  }
+  $("speed").textContent = `detector ${result.detect_ms} ms · ${rate ? rate.toFixed(1) : "..."} frames/s through the page`;
+}
+
+async function loop(id) {
+  let previous = performance.now();
+  while (id === run) {
+    if (!draw(grab, GRAB_WIDTH)) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      continue;
+    }
+    // Not toBlob: it waits for the browser to be idle, which took about 800 ms a frame in testing.
+    const frame = Uint8Array.from(atob(grab.toDataURL("image/jpeg", 0.8).split(",")[1]), char => char.charCodeAt(0));
+    try {
+      const response = await fetch("/api/see", { method: "POST", body: frame });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      if (id !== run) return;
+      last = result;
+      show(result);
+      $("error").textContent = "";
+      const now = performance.now();
+      if (source === "photo") {
+        panAt = Math.max(0, Math.min(1, panAt + result.command.pan * PAN_SPEED * (now - previous) / 1000));
+      }
+      previous = now;
+    } catch (error) {
+      $("error").textContent = "Couldn't reach the detector: " + error.message;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    overlay();
+    await new Promise(resolve => setTimeout(resolve, 15));
+  }
+}
+
+function start(kind) {
+  source = kind;
+  last = null;
+  run += 1;
+  loop(run);
+}
+
+function stopVideo() {
+  if (video.srcObject) video.srcObject.getTracks().forEach(track => track.stop());
+  video.srcObject = null;
+  video.pause();
+}
+
+$("photo").addEventListener("click", async () => {
+  stopVideo();
+  $("sourceNote").textContent = "The test photo stands in for a turning camera: the steering moves the view.";
+  photo = new Image();
+  photo.src = "/test-photo";
+  try {
+    await photo.decode();
+    panAt = 0;
+    start("photo");
+  } catch {
+    $("error").textContent = "There's no test photo in models/detector.";
+  }
+});
+
+$("camera").addEventListener("click", async () => {
+  try {
+    stopVideo();
+    video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { width: 1280 }, audio: false });
+    await video.play();
+    $("sourceNote").textContent = "Live camera. The steering values aren't connected to any motor yet.";
+    start("video");
+  } catch (error) {
+    $("error").textContent = error.name === "NotFoundError" ? "No camera found. Try the test photo or a video file." : "Couldn't use the camera: " + error.message;
+  }
+});
+
+$("file").addEventListener("change", async event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  stopVideo();
+  video.src = URL.createObjectURL(file);
+  await video.play();
+  $("sourceNote").textContent = `Playing ${file.name}. It stays in this browser and on this PC.`;
+  start("video");
+});
+
+$("halt").addEventListener("click", async () => {
+  halted = !halted;
+  await fetch(halted ? "/api/halt" : "/api/resume", { method: "POST" });
+  $("halt").textContent = halted ? "Start following again" : "Stop following";
+});
+
+$("photo").click();
+</script>
+</body>
+</html>

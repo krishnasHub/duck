@@ -20,6 +20,8 @@ from transformers import AutoTokenizer
 
 import chatlog
 import planner
+import quick
+import sums
 from common import ROOT, base_path, load_system, persona_dir, render_prompt, search_query, with_lore, with_memory
 from library import LIBRARY, Library, tokens
 from llm import Llama
@@ -87,6 +89,7 @@ MAX_PROMPT_TOKENS = 3600
 # The GPU handles one reply at a time.
 gpu_lock = threading.Lock()
 save_lock = threading.Lock()
+timers = quick.Timers()
 
 
 def clean_messages(raw):
@@ -219,6 +222,11 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/api/memory":
             self.send_json(200, {"notes": memory.notes if memory else []})
+        elif path == "/api/timers":
+            due = timers.due()
+            for timer in due:
+                log({"type": "timer_due", "text": timer["text"]})
+            self.send_json(200, {"due": due})
         elif path == "/":
             body = PAGE.read_bytes()
             self.send_response(200)
@@ -340,6 +348,14 @@ class Handler(BaseHTTPRequestHandler):
             send({"guard": True})
             record("companion", line)
             return
+        # After the safety checks, so nothing here can answer a message that needs them.
+        found = quick.answer(latest, timers) if tuned else None
+        if found:
+            reply, kind = found
+            send({"text": reply})
+            send({"tool": kind})
+            record("tool", reply, tool=kind)
+            return
         if passages:
             send({"passages": [{"title": p["title"], "section": p["section"], "url": p["url"], "text": p["text"]} for p in passages]})
         # Lore answers stay on the passages, so notes only reach everyday chat.
@@ -348,7 +364,9 @@ class Handler(BaseHTTPRequestHandler):
             send({"remembered": notes})
         asked = [m["content"] for m in messages if m["role"] == "user"]
         if tuned and not passages and planner.is_plan(asked):
-            send({"thinking": random.choice(planner.THINKING_LINES)})
+            # Count-back needs almost no model time, so he has nothing to stall for.
+            if not sums.count_back(latest):
+                send({"thinking": random.choice(planner.THINKING_LINES)})
             try:
                 reply, work, voiced, replaced, fixes, stats = work_out(messages, temperature, max_new_tokens, notes)
             except OSError as error:

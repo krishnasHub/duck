@@ -21,7 +21,7 @@ TERM_PARTS = re.compile(rf"([-+–−]?)\s*\$?(\d+(?::\d+)?(?:\.\d+)?)\s*({UNIT}
 WORDS = (("\\times", "*"), ("\\div", "/"), ("divided by", "/"), ("times", "*"), ("minus", "-"), ("plus", "+"))
 
 
-def _symbols(text):
+def symbols(text):
     """Turn spoken operators into symbols."""
     for word, symbol in WORDS:
         text = re.sub(re.escape(word), symbol, text, flags=re.I)
@@ -117,7 +117,7 @@ def _same_units(left):
 
 def check(left, right):
     """Returns the right answer as text if the claimed one is wrong, or None if it's right or can't be checked."""
-    left = _symbols(left)
+    left = symbols(left)
     right_match = re.match(rf"({NUMBER})\s*({UNIT})?", right, re.I)
     claimed, right_unit = right_match.group(1), right_match.group(2)
     timed = clock(left, ":" in claimed or bool(_meridian(right_unit)))

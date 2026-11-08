@@ -129,6 +129,7 @@ summary { cursor: pointer; }
 <script>
 const $ = id => document.getElementById(id);
 const log = $("log");
+const THINKING_DELAY_MS = 1200;
 let history = [];
 let busy = false;
 const newSession = () => new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14) + "-" + Math.random().toString(36).slice(2, 6);
@@ -173,21 +174,65 @@ function addNote(target, text) {
   target.msg.append(note);
 }
 
-async function speak(text) {
-  if (!$("speak").checked || !text) return;
-  try {
-    const response = await fetch("/api/speak", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
-    });
-    if (!response.ok) throw new Error((await response.json()).error);
-    const url = URL.createObjectURL(await response.blob());
+// Lines play one after another, so the reply never talks over the "thinking" line.
+let speechQueue = Promise.resolve();
+
+function playClip(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
-    audio.addEventListener("ended", () => URL.revokeObjectURL(url));
-    await audio.play();
-  } catch (error) {
+    const finish = () => { URL.revokeObjectURL(url); resolve(); };
+    audio.addEventListener("ended", finish);
+    audio.addEventListener("error", finish);
+    audio.play().catch(reject);
+  });
+}
+
+function speak(text) {
+  if (!$("speak").checked || !text) return;
+  const clip = fetch("/api/speak", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
+  }).then(async response => {
+    if (!response.ok) throw new Error((await response.json()).error);
+    return response.blob();
+  });
+  speechQueue = speechQueue.then(async () => playClip(await clip)).catch(error => {
     $("voiceStatus").textContent = "Couldn't speak: " + error.message;
+  });
+}
+
+function chime() {
+  try {
+    const context = new AudioContext();
+    const tone = context.createOscillator();
+    const level = context.createGain();
+    tone.frequency.value = 880;
+    level.gain.setValueAtTime(0.15, context.currentTime);
+    level.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.6);
+    tone.connect(level).connect(context.destination);
+    tone.start();
+    tone.stop(context.currentTime + 0.6);
+  } catch {
+    // A silent timer still shows up in the chat.
   }
 }
+
+// Timers run on the device. The page only asks whether any have finished.
+async function checkTimers() {
+  try {
+    const { due } = await (await fetch("/api/timers")).json();
+    for (const timer of due) {
+      const target = add("tuned", "Tuned duck");
+      target.bubble.textContent = timer.text;
+      addNote(target, "Timer finished.");
+      chime();
+      speak(timer.text);
+    }
+  } catch {
+    // The server may be restarting.
+  }
+}
+setInterval(checkTimers, 2000);
 
 let recorder = null;
 let holding = false;
@@ -290,7 +335,7 @@ async function ask(messages, tuned, target) {
   if (!response.ok) throw new Error((await response.json()).error || "The server refused the request.");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = "", text = "", done = null;
+  let buffer = "", text = "", done = null, stall = null;
   while (true) {
     const { value, done: finished } = await reader.read();
     if (finished) break;
@@ -314,14 +359,20 @@ async function ask(messages, tuned, target) {
         note.textContent = "Companion check: fixed line, not written by the model.";
         target.msg.append(note);
       }
+      if (item.tool) addNote(target, "Worked out by code, not the model.");
       if (item.text) {
+        clearTimeout(stall);
         text += item.text;
         target.bubble.textContent = text;
         log.scrollTop = log.scrollHeight;
       }
       if (item.done) done = item.done;
       if (item.remembered) addNote(target, "Remembered: " + item.remembered.join("; "));
-      if (item.thinking) target.bubble.textContent = item.thinking;
+      if (item.thinking) {
+        target.bubble.textContent = item.thinking;
+        // Only stall out loud if there's a silence to fill: rarely here, often on the Jetson.
+        stall = setTimeout(() => speak(item.thinking), THINKING_DELAY_MS);
+      }
       if (item.working) showWorking(target, item.working);
       if (item.noted) {
         addNote(target, "Noted: " + item.noted.join("; "));
