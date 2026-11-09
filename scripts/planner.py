@@ -46,6 +46,19 @@ TACTICS_SYSTEM = (
     "RISK: They break out through one door, so the ring holds and doesn't chase.\n"
     "CONCLUSION: We outnumber them 4 to 1, so fight, but don't rush. Ring both doors with 40 spearmen each, call for surrender, then go in together."
 )
+NEXT_MOVE_SYSTEM = (
+    "A battle is under way in a story and the user has just told you what happened. Don't make a new battle plan, and don't repeat the odds. "
+    "Use only the people on the campaign sheet, and never order more than exist. Fill in these lines and nothing else:\n"
+    "CHANGED: what just happened, in one sentence.\n"
+    "DANGER: the biggest threat right now, in one sentence.\n"
+    "ORDER: one order for right now, saying who does what.\n"
+    "CONCLUSION: one or two plain sentences that react to what just happened, then give the order.\n\n"
+    "Example, after \"Our riders broke their line, but the orcs are at the gate\", with 12 riders and 30 spearmen against 150 orcs:\n"
+    "CHANGED: The riders broke their line, but the orcs reached the gate.\n"
+    "DANGER: The gate falling while the riders are away.\n"
+    "ORDER: All 30 spearmen hold the gate, and the 12 riders hit the orcs from behind.\n"
+    "CONCLUSION: Well struck, but the gate is the danger now. Put all 30 spearmen on the gate and send your 12 riders into their backs."
+)
 VOICE_NOTE = (
     "You have already worked this out, and the working below is correct. Give the user the answer and the numbers behind it "
     "in one to three short sentences, in your own voice. Keep every number exactly as it is. Don't list the numbers, don't "
@@ -87,7 +100,9 @@ in_war = war.wants_plan
 
 
 def work_system(messages):
-    return TACTICS_SYSTEM if in_war(messages) else WORK_SYSTEM
+    if not in_war(messages):
+        return WORK_SYSTEM
+    return NEXT_MOVE_SYSTEM if war.is_next_move(messages) else TACTICS_SYSTEM
 
 
 def voice_instructions(work, messages):
@@ -210,14 +225,17 @@ def _tactics_reply(voiced, found, work, messages):
         return found, f"new numbers: {new}"
     if len(voiced.split()) > MAX_SPOKEN_WORDS:
         return found, "too long"
-    if _drifted(voiced, found, messages):
+    if _drifted(voiced, work, messages):
         return found, "changed the plan"
     return clean(voiced), ""
 
 
-def _drifted(voiced, found, messages):
-    """A reply built mostly from words in neither the decision nor the question has wandered off, as with "offer them gold"."""
-    known = set(_words(found)) | set(_words(" ".join(m["content"] for m in messages if m["role"] == "user")))
+def _drifted(voiced, work, messages):
+    """A reply built mostly from words in neither the working nor the chat has wandered off, as with "offer them gold".
+
+    It's a story, so a line in his voice that keeps to the working is worth more than the plain version.
+    """
+    known = set(_words(work)) | set(_words(" ".join(m["content"] for m in messages if m["role"] == "user")))
     said = [word for word in _words(voiced) if len(word) > MIN_PLAN_WORD]
     return bool(said) and sum(word in known for word in said) / len(said) < MIN_SHARED_WORDS
 

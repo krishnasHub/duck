@@ -74,6 +74,32 @@ check("our parts are kept, with the others", ours.ours == {"archers": 3, "strong
 check("the odds come out right", "They outnumber us 16.7 to 1." in ours.sheet(), ours.sheet())
 check("'are facing' still splits the sides", war.read(["My 60 elves are facing 30 goblins. How should we fight?"]).theirs == {"goblins": 30})
 
+# A second chat that went nowhere: a list in its own sentence went to the enemy and wiped out their army, and every turn was a new plan.
+START = "How would you defend our keep? About 200 goblins are camped outside our walls and woods."
+LISTED = war.read([START, "We have about 12 mighty men! 4 with horses, 5 archers and 3 with swords and shields"])
+check("a list after '!' stays ours", LISTED.ours == {"with horses": 4, "archers": 5, "with swords and shields": 3}, LISTED)
+check("it doesn't touch the enemy", LISTED.theirs == {"goblins": 200}, LISTED)
+check("'We have 12 men. 100 orcs wait outside' still splits", war.read(["We have 12 men. 100 orcs camped outside. What should we do?"]).theirs == {"orcs": 100})
+check("a small enemy number is only a part", war.read([START, "5 archers stand on the hill."]).their_total == 200)
+check("unless they say it's the total", war.read([START, "Actually, there are only 50 goblins."]).their_total == 50)
+BATTLE = chat(START, war.ASKS_OURS, "We have 12 men", "A plan.", "It's working, they are attacking the men in the woods. Now what?")
+check("a follow-up is a next move, not a new plan", war.is_next_move(BATTLE) and planner.work_system(BATTLE) == planner.NEXT_MOVE_SYSTEM)
+check("the first plan is a whole plan", planner.work_system(chat(START, war.ASKS_OURS, "We have 12 men")) == planner.TACTICS_SYSTEM)
+check("a what-if is a whole new plan", planner.work_system(chat(START, war.ASKS_OURS, "We have 12 men", "A plan.", "What if we only had 5 men?")) == planner.TACTICS_SYSTEM)
+STORY = chat(START, war.ASKS_OURS, "We have 12 men", "A plan.", "We shot arrows and took out a good number of them, but now they're attacking the wall")
+check("telling the story carries on the war", war.wants_plan(STORY))
+check("talk of the ground carries on the war", war.wants_plan(chat(START, war.ASKS_OURS, "We have 12 men", "A plan.", "You tell me. I can sneak some into the woods.")))
+check("unknown losses go on the sheet", war.UNSTATED_LOSS_NOTE in war.read([m["content"] for m in STORY if m["role"] == "user"]).sheet())
+WIN = chat(START, war.ASKS_OURS, "We have 12 men", "A plan.", "They fled into the woods!")
+check("a win gets an ending", war.council(WIN) == war.VICTORY_LINE)
+check("a win ends the campaign", not war.read([m["content"] for m in WIN if m["role"] == "user"]).active)
+check("after a win, ordinary chat is ordinary", not war.wants_plan([*WIN, {"role": "assistant", "content": war.VICTORY_LINE}, {"role": "user", "content": "That was fun. What's for dinner?"}]))
+check("'they won't retreat' isn't a win", war.council(chat(START, war.ASKS_OURS, "We have 12 men", "A plan.", "They won't retreat, they press on!")) != war.VICTORY_LINE)
+check("a win with no war is nothing", not war.just_won(chat("They fled into the woods!")))
+in_voice = "Now they're distracted, so strike at the wall, and let the others go for the camp."
+worked = "CHANGED: They are distracted.\nORDER: Strike at the wall and go for the camp.\nCONCLUSION: Strike at the wall."
+check("a line in his voice that keeps to the working survives", planner.final_reply(in_voice, worked, chat(START))[1] == "")
+
 check("no numbers gets asked both", war.council(chat("How do we beat the orcs at the river?")) == war.ASKS_BOTH)
 check("no count of ours gets asked", war.council(chat("100 orcs hold the river. How do we beat them?")) == war.ASKS_OURS)
 check("no count of theirs gets asked", war.council(chat("We have 20 men at the river. How do we beat the orcs?")) == war.ASKS_THEIRS)

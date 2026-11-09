@@ -84,6 +84,8 @@ flourish_file = persona_dir(args.persona) / "lore_flourishes.txt"
 flourishes = flourish_file.read_text(encoding="utf-8").strip().splitlines() if flourish_file.exists() else []
 war_file = persona_dir(args.persona) / "war_flourishes.txt"
 war_flourishes = war_file.read_text(encoding="utf-8").strip().splitlines() if war_file.exists() else []
+questions_file = persona_dir(args.persona) / "war_questions.txt"
+war_questions = questions_file.read_text(encoding="utf-8").strip().splitlines() if questions_file.exists() else []
 NOT_RECALLED = re.compile(r"can't recall|don't recall|won't make it up|isn't in my memory|holds nothing|no memory", re.I)
 
 CANT_RECALL = "I can't recall that, and I won't make it up."
@@ -396,8 +398,11 @@ class Handler(BaseHTTPRequestHandler):
                 record("plan", "", error=str(error))
                 return
             # A fixed closing line brings his voice back to a plan, with no chance of changing a number or a step.
-            if fighting and war_flourishes and reply != planner.LOST_THREAD and random.random() < 0.6:
-                reply += " " + random.choice(war_flourishes)
+            # In a battle under way, he usually hands the turn back, so the story moves.
+            if fighting and reply != planner.LOST_THREAD:
+                closing = war_questions if war.is_next_move(messages) and random.random() < 0.7 else war_flourishes
+                if closing and (closing is war_questions or random.random() < 0.6):
+                    reply += " " + random.choice(closing)
             send({"working": work})
             send({"text": reply})
             send({"done": stats})
