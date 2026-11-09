@@ -49,6 +49,31 @@ check("you can't lose more than you have", war.read([CAMP, "We lost 50 men."]).o
 check("a new battle starts a new sheet", (lambda c: c.ours == {"elves": 6} and c.theirs == {"goblins": 30} and not c.their_things)(war.read([CAMP, "New fight. We have 6 elves against 30 goblins. What should we do?"])))
 check("chat before the war stays off the sheet", war.read(["I have 3 guards at my gate at home, for a laugh.", CAMP]).ours == {"men": 20})
 
+# A chat that went wrong: the campaign started too late, a total and its parts were added up, and our own troops were read as the enemy's.
+SPLIT = war.read(["How would you defend our keep? About 200 goblins are camped outside our walls."])
+check("'how would you defend' starts a campaign", SPLIT.active and SPLIT.theirs == {"goblins": 200}, SPLIT)
+OPENING = ["How would you defend our keep? About 200 goblins are camped outside our walls."]
+check("he asks for our number straight away", war.council(chat(OPENING[0])) == war.ASKS_OURS)
+SEIGE_TURN = chat(OPENING[0], war.ASKS_OURS, "They have siege engines too!")
+check("a new fact carries on the war", war.wants_plan(SEIGE_TURN))
+check("he asks again, in other words, if he still lacks our number", war.council(SEIGE_TURN) == war.ASKS_AGAIN)
+check("he never asks a third time", war.council(chat(OPENING[0], war.ASKS_OURS, "They have siege engines too!", war.ASKS_AGAIN, "They have catapults too!")) is None)
+check("the fact stays on the sheet", "The enemy has siege weapons." in war.read([m["content"] for m in SEIGE_TURN if m["role"] == "user"]).sheet())
+PLEA = chat(OPENING[0], war.ASKS_OURS, "We only have 12 men", "A plan.", "No help is coming. Is there something we can do?")
+check("a plea for help carries on the war", war.wants_plan(PLEA))
+check("no help coming stays on the sheet", "No help is coming." in war.read([m["content"] for m in PLEA if m["role"] == "user"]).sheet())
+BREAKDOWN = [OPENING[0], "We only have 12 men", "Word is 200 of them are out there. 40 of them are archers, 60 are strong men and the rest are cooks."]
+parts = war.read(BREAKDOWN)
+check("a total and its parts aren't added up", parts.their_total == 200, parts)
+check("the parts are kept", parts.theirs == {"archers": 40, "strong men": 60, "cooks": 100}, parts)
+check("the enemy's breakdown leaves ours alone", parts.ours == {"men": 12}, parts)
+MINE = [*BREAKDOWN, "I have 12 men with me, 3 archers, 4 strong men with swords and shields and 2 light cavilry"]
+ours = war.read(MINE)
+check("a list after 'I have' is all ours", ours.our_total == 12 and ours.their_total == 200, ours)
+check("our parts are kept, with the others", ours.ours == {"archers": 3, "strong men": 4, "light cavilry": 2, "other men": 3}, ours)
+check("the odds come out right", "They outnumber us 16.7 to 1." in ours.sheet(), ours.sheet())
+check("'are facing' still splits the sides", war.read(["My 60 elves are facing 30 goblins. How should we fight?"]).theirs == {"goblins": 30})
+
 check("no numbers gets asked both", war.council(chat("How do we beat the orcs at the river?")) == war.ASKS_BOTH)
 check("no count of ours gets asked", war.council(chat("100 orcs hold the river. How do we beat them?")) == war.ASKS_OURS)
 check("no count of theirs gets asked", war.council(chat("We have 20 men at the river. How do we beat the orcs?")) == war.ASKS_THEIRS)
