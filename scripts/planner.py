@@ -6,6 +6,7 @@ Code then checks the spoken reply, because the voice step sometimes changes a nu
 import re
 
 import sums
+import war
 
 _WORK_END = (
     "If a question compares two sides, say which side is which and how many times bigger one is. If the user is badly "
@@ -19,9 +20,10 @@ WORK_SYSTEM = (
 )
 TACTICS_SYSTEM = (
     "The user wants a plan for a fight between two sides. Think like a careful commander, and use only what they gave. Don't invent "
-    "allies, tunnels or weapons. Fill in these lines, in this order, and nothing else:\n"
-    "SIDES: how many the enemy has and what they depend on, how many the user has, and who outnumbers whom, as a ratio.\n"
-    "DIRECT FIGHT: whether a straight fight would work, in one sentence, going by the ratio.\n"
+    "allies, tunnels or weapons. The campaign sheet has the correct numbers and ratio, so copy them. Fill in these lines, in this "
+    "order, and nothing else:\n"
+    "SIDES: how many the enemy has and what they depend on, how many the user has, and the ratio from the sheet.\n"
+    "DIRECT FIGHT: whether a straight fight would work, in one sentence. If the user has the larger side, it usually would.\n"
     "WEAK POINT: the one thing the enemy can't easily protect or can't do without, from the details given.\n"
     "GROUND: the one feature of the place that helps the user most, and why. Leave out features that don't help.\n"
     "PLAN: three numbered steps in order. Each says who does what and uses the user's real numbers, keeping a small force together.\n"
@@ -80,39 +82,30 @@ LOOKUP = re.compile(r"^\W*(what|which|who|when|where)('s| is| was| were| year| d
 CONTINUES = re.compile(r"\b(what if|would it|will it|does it|is it|even with|instead|only have|only had|what about|still)\b", re.I)
 
 
-FIGHTERS = re.compile(r"\b(soldiers?|men|raiders?|archers?|knights?|riders?|army|armies|orcs?|goblins?|elves|dwarves|troops?|guards?|warriors?|bandits?|pirates?|mercenaries|scouts?|enemy|enemies|siege|sailors?|camped|surround(?:ed|s)?)\b", re.I)
-OPEN_ASK = re.compile(r"\b(how (?:do|would|should|can|could|might) (?:i|we)|what (?:do|should|would|can) (?:i|we)|best (?:plan|way)|what if|any ideas|strategy)\b", re.I)
+is_tactics = war.is_tactics
+in_war = war.wants_plan
 
 
-def is_tactics(question):
-    """An open question about a fight, which has no single sum to check. "Can 3 wizards kill 30 orcs?" is still a sum."""
-    return bool(FIGHTERS.search(question) and OPEN_ASK.search(question))
+def work_system(messages):
+    return TACTICS_SYSTEM if in_war(messages) else WORK_SYSTEM
 
 
-def work_system(question):
-    return TACTICS_SYSTEM if is_tactics(question) else WORK_SYSTEM
-
-
-def voice_instructions(work, question):
+def voice_instructions(work, messages):
     """Tactics only hand over the decision. Given the whole form, the voice step echoed it, or its instructions."""
-    if is_tactics(question):
+    if in_war(messages):
         return f"{TACTICS_VOICE}{conclusion(work) or clean(work)}"
     return f"{VOICE_NOTE}{work}"
 
 
 def work_messages(messages):
     """Only what the user said, so the working can't inherit a wrong figure from an earlier reply."""
+    if in_war(messages):
+        return [{"role": "user", "content": war.brief(messages)}]
     said = [m["content"] for m in messages if m["role"] == "user"]
-    latest = said[-1]
-    if is_tactics(latest):
-        # Earlier chat confuses the form, and old numbers beat new ones unless it's told which count.
-        if len(said) > 1 and CONTINUES.search(latest):
-            latest = f"Earlier: {said[-2]}\nNow: {latest}\nWhere these differ, use the numbers from Now."
-        return [{"role": "user", "content": latest}]
     return [{"role": "user", "content": "\n".join(said)}]
 
 
-def work_with_sums(generate, prompt, question=""):
+def work_with_sums(generate, prompt, question="", sheet=""):
     """Write the working, correct the first wrong sum, and let the model carry on from the right number.
 
     generate(prompt, max_tokens) returns the raw text and how many tokens it took. Stopping at the wrong line matters:
@@ -122,9 +115,9 @@ def work_with_sums(generate, prompt, question=""):
     solved = sums.direct(question)
     if solved:
         return solved, 0, ["worked out by code"]
-    if is_tactics(question):
+    if sheet:
         work, used = generate(prompt, TACTICS_TOKENS)
-        return work, used, []
+        return f"{sheet}\n\n{work}", used, []
     work, used, fixes = "", 0, []
     while True:
         piece, tokens = generate(prompt + work, min(WORK_TOKENS, WORK_TOKEN_LIMIT - used))
@@ -236,7 +229,7 @@ def final_reply(voiced, work, messages):
         return found or LOST_THREAD, "repeated its instructions"
     if MENTIONS_WORKING.search(voiced):
         return found or LOST_THREAD, "mentioned the working"
-    if messages and is_tactics(messages[-1]["content"]):
+    if messages and in_war(messages):
         return _tactics_reply(voiced, found, work, messages)
     # The voice step sometimes just copies out the working, which is no good read aloud.
     if found and ("\\" in voiced or len(voiced.split()) > MAX_SPOKEN_WORDS):

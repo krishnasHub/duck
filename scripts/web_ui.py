@@ -21,7 +21,9 @@ from transformers import AutoTokenizer
 import chatlog
 import planner
 import quick
+import safety
 import sums
+import war
 from common import ROOT, base_path, load_system, persona_dir, render_prompt, search_query, with_lore, with_memory
 from library import LIBRARY, Library, tokens
 from llm import Llama
@@ -80,6 +82,8 @@ prompts = (persona_dir(args.persona) / "eval_prompts.txt").read_text(encoding="u
 
 flourish_file = persona_dir(args.persona) / "lore_flourishes.txt"
 flourishes = flourish_file.read_text(encoding="utf-8").strip().splitlines() if flourish_file.exists() else []
+war_file = persona_dir(args.persona) / "war_flourishes.txt"
+war_flourishes = war_file.read_text(encoding="utf-8").strip().splitlines() if war_file.exists() else []
 NOT_RECALLED = re.compile(r"can't recall|don't recall|won't make it up|isn't in my memory|holds nothing|no memory", re.I)
 
 CANT_RECALL = "I can't recall that, and I won't make it up."
@@ -162,13 +166,17 @@ def work_out(messages, temperature, max_new_tokens, notes):
     """Plain model does the working, the tuned adapter says the result, and code checks the numbers."""
     window = recent(messages)
     started = time.time()
+    fighting = planner.in_war(messages)
+    # A campaign reads the whole chat, so its numbers outlast the short window.
+    source = messages if fighting else window
+    sheet = war.read([m["content"] for m in messages if m["role"] == "user"]).sheet() if fighting else ""
     with gpu_lock:
         def generate(prompt, max_tokens):
             text = llama.complete(prompt, None, 0.0, max_tokens)
             return text, llama.last_tokens
 
-        work, tokens_used, fixes = planner.work_with_sums(generate, render_prompt(tokenizer, planner.work_system(messages[-1]["content"]), planner.work_messages(window)), messages[-1]["content"])
-        voice_system = f"{with_memory(system, notes)}\n\n{planner.voice_instructions(work, messages[-1]['content'])}"
+        work, tokens_used, fixes = planner.work_with_sums(generate, render_prompt(tokenizer, planner.work_system(messages), planner.work_messages(source)), messages[-1]["content"], sheet)
+        voice_system = f"{with_memory(system, notes)}\n\n{planner.voice_instructions(work, messages)}"
         voiced = llama.complete(fit_prompt(voice_system, window), "everyday", min(temperature, 0.3), max_new_tokens)
         tokens_used += llama.last_tokens
     reply, replaced = planner.final_reply(voiced, work, messages)
@@ -334,6 +342,12 @@ class Handler(BaseHTTPRequestHandler):
             send({"safety": True})
             record("crisis", CRISIS_REPLY)
             return
+        asked = [m["content"] for m in messages if m["role"] == "user"]
+        if safety.is_real_harm(asked):
+            send({"text": safety.HARM_REPLY})
+            send({"safety": True})
+            record("real_harm", safety.HARM_REPLY)
+            return
         # Questions about Middle-earth often mention death, so they skip the meaning-based check,
         # unless the message is about the user's own life.
         in_story = library.is_lore_question(latest) if library else False
@@ -356,14 +370,22 @@ class Handler(BaseHTTPRequestHandler):
             send({"tool": kind})
             record("tool", reply, tool=kind)
             return
+        fighting = tuned and planner.in_war(messages)
+        if fighting:
+            question = war.council(messages)
+            if question:
+                send({"text": question})
+                send({"council": True})
+                record("council", question)
+                return
+            passages = []
         if passages:
             send({"passages": [{"title": p["title"], "section": p["section"], "url": p["url"], "text": p["text"]} for p in passages]})
         # Lore answers stay on the passages, so notes only reach everyday chat.
         notes = memory.recall(latest, first_turn=len(messages) == 1) if memory and not passages else None
         if notes:
             send({"remembered": notes})
-        asked = [m["content"] for m in messages if m["role"] == "user"]
-        if tuned and not passages and planner.is_plan(asked):
+        if tuned and not passages and (fighting or planner.is_plan(asked)):
             # Count-back needs almost no model time, so he has nothing to stall for.
             if not sums.direct(latest):
                 send({"thinking": random.choice(planner.THINKING_LINES)})
@@ -373,11 +395,16 @@ class Handler(BaseHTTPRequestHandler):
                 send({"error": str(error)})
                 record("plan", "", error=str(error))
                 return
+            # A fixed closing line brings his voice back to a plan, with no chance of changing a number or a step.
+            if fighting and war_flourishes and reply != planner.LOST_THREAD and random.random() < 0.6:
+                reply += " " + random.choice(war_flourishes)
             send({"working": work})
             send({"text": reply})
             send({"done": stats})
             record("plan", reply, memory=notes or [], working=work, voiced=voiced, replaced=replaced, sum_fixes=fixes, stats=stats)
-            self.take_notes(latest, who, send, in_story)
+            # "We have 20 men" is about the campaign, not the user's life.
+            if not fighting:
+                self.take_notes(latest, who, send, in_story)
             return
         route = ("lore" if passages else "everyday") if tuned else "untuned"
         answer, flourish, invented = "", False, []

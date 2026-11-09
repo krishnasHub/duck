@@ -86,6 +86,48 @@ DEPENDENCY_REPLIES = [
 ]
 
 
+# War plans are for stories and games. Patterns only, so these reduce the risk rather than remove it.
+HARM_REPLY = (
+    "I'm stepping out of the character for this. War plans are for stories and games, and I won't help plan harm to real people. "
+    "If someone is threatening you, or you're scared of what you might do, please talk to someone you trust or call your local "
+    "emergency number. If this is a story or a game, say so and we'll plot."
+)
+FICTION = re.compile(
+    r"\b(?:in|for)\s+(?:my|our|a|the)\s+(?:\w+\s+)?(?:game|story|novel|book|campaign|film|movie|script|screenplay|d&d|dnd|rpg|fanfic|comic)\b"
+    r"|\b(?:middle-?earth|mordor|gondor|rohan|isengard|the shire)\b",
+    re.I,
+)
+REAL_PEOPLE = re.compile(
+    r"\b(?:my|our)\s+(?:\w+\s+)?(?:boss|manager|coworkers?|co-workers?|colleagues?|neighbou?rs?|wife|husband|partner|ex|girlfriend|boyfriend|"
+    r"landlord|landlady|teachers?|classmates?|roommates?|flatmates?|brother|sister|mum|mom|dad|father|mother|son|daughter|kids?|children|"
+    r"friends?|cousin|uncle|aunt|family)\b"
+    r"|\b(?:at|from|in)\s+(?:my|our)\s+(?:work|job|office|school|college|company|street|building|neighbou?rhood|town)\b"
+    r"|\bat work\b|\bin real life\b|\breal (?:people|person)\b|\bthe (?:police|cops)\b",
+    re.I,
+)
+VIOLENCE = re.compile(
+    r"\b(?:kill|killing|murder|harm|harming)\b(?!\s+(?:me|myself|us)\b)"
+    r"|\bhurt(?:ing)?\b(?!\s+(?:me|myself|us|my\s+(?:feelings|back|knee|head|neck|foot|leg|arm|hand|shoulder|pride))\b)"
+    r"|\b(?:attack|attacking|ambush|ambushing|stab|stabbing|poison|poisoning|strangle|beat(?:ing)? (?:him|her|them|up)|burn down|blow up|bomb)\b"
+    r"|\bshoot(?:ing)?\s+(?:him|her|them|my|our|the)\b(?!\s+(?:ball|photos?|video))"
+    r"|\b(?:cut|take|run)\s+(?:him|her|them)\s+(?:down|out|over)\b|\bget rid of (?:him|her|them)\b",
+    re.I,
+)
+
+
+def names_real_people(text):
+    """Someone from the user's own life, unless they've said it's a story or game."""
+    return bool(REAL_PEOPLE.search(text)) and not FICTION.search(text)
+
+
+def is_real_harm(asked):
+    """asked is the user's messages, oldest first. "How do I ambush them?" can point back at the message before it."""
+    latest = asked[-1]
+    if FICTION.search(latest) or not VIOLENCE.search(latest):
+        return False
+    return names_real_people(latest) or (len(asked) > 1 and names_real_people(asked[-2]))
+
+
 def is_explicit_crisis(text):
     cleaned = BENIGN.sub(" ", text.replace("’", "'"))
     return bool(PATTERN.search(cleaned))

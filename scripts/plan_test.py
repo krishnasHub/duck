@@ -12,6 +12,7 @@ import urllib.request
 from transformers import AutoTokenizer
 
 import planner
+import war
 from common import base_path, load_system, persona_dir, with_memory
 
 parser = argparse.ArgumentParser()
@@ -87,12 +88,15 @@ def run(mode, messages):
             return complete(prompt, max_tokens=max_tokens, temperature=0.0, strip=False)
 
         if mode != "planner_nocheck":
-            work_system = planner.WORK_SYSTEM if mode == "planner_noform" else planner.work_system(messages[-1]["content"])
-            work, first, fixes = planner.work_with_sums(generate, render(work_system, planner.work_messages(messages)), messages[-1]["content"])
+            fighting = mode != "planner_noform" and planner.in_war(messages)
+            work_system = planner.work_system(messages) if fighting else planner.WORK_SYSTEM
+            sheet = war.read([m["content"] for m in messages if m["role"] == "user"]).sheet() if fighting else ""
+            source = planner.work_messages(messages) if fighting else [{"role": "user", "content": "\n".join(m["content"] for m in messages if m["role"] == "user")}]
+            work, first, fixes = planner.work_with_sums(generate, render(work_system, source), messages[-1]["content"], sheet)
         else:
             work, first = generate(render(planner.WORK_SYSTEM, planner.work_messages(messages)), planner.WORK_TOKENS)
             fixes = []
-        voiced, second = complete(render(f"{system}\n\n{planner.voice_instructions(work, messages[-1]['content'])}", messages), EVERYDAY, 0.3)
+        voiced, second = complete(render(f"{system}\n\n{planner.voice_instructions(work, messages)}", messages), EVERYDAY, 0.3)
         reply, why = planner.final_reply(voiced, work, messages)
         return reply, first + second, f"{work} || FIXED: {fixes} || VOICED: {voiced} || REPLACED: {why}"
     if mode == "one_pass":

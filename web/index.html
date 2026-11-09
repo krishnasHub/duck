@@ -350,7 +350,7 @@ async function ask(messages, tuned, target) {
       if (item.safety) {
         const note = document.createElement("div");
         note.className = "stats";
-        note.textContent = "Safety response: fixed text from the crisis checks, not written by the model.";
+        note.textContent = "Safety response: fixed text from the safety checks, not written by the model.";
         target.msg.append(note);
       }
       if (item.guard) {
@@ -359,6 +359,7 @@ async function ask(messages, tuned, target) {
         note.textContent = "Companion check: fixed line, not written by the model.";
         target.msg.append(note);
       }
+      if (item.council) addNote(target, "War council: fixed line, not written by the model.");
       if (item.tool) addNote(target, "Worked out by code, not the model.");
       if (item.text) {
         clearTimeout(stall);

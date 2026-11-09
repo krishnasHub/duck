@@ -122,7 +122,7 @@ check("mentioning having worked it out is replaced", planner.final_reply("I've w
 check("a conclusion cut off mid-sentence loses the unfinished part", planner.conclusion("CONCLUSION: At 5 to 1, don't fight. Use the") == "At 5 to 1, don't fight.")
 check("a conclusion with no finished sentence counts as none", planner.conclusion("CONCLUSION: At 5 to 1, don't") == "")
 later = [{"role": "user", "content": "My 80 riders face 40 archers. What do I do?"}, {"role": "assistant", "content": "Ride round."}, {"role": "user", "content": "What if I only had 10 riders?"}]
-check("a follow-up tells the form which numbers count", "use the numbers from Now" in planner.work_messages(later)[0]["content"])
+check("a follow-up puts the new number on the sheet", "Us: 10 riders." in planner.work_messages(later)[0]["content"])
 unrelated = [{"role": "user", "content": "What would Gandalf say?"}, {"role": "assistant", "content": "Plenty."}, *FIGHT]
 check("earlier chat stays out of a new fight", "Gandalf" not in planner.work_messages(unrelated)[0]["content"])
 
