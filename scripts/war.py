@@ -10,12 +10,12 @@ import safety
 
 FIGHTER_NOUNS = (
     r"soldiers?|men|man|raiders?|archers?|knights?|riders?|orcs?|goblins?|elves|elf|dwarves|dwarf|troops?|guards?|warriors?|bandits?|pirates?|"
-    r"mercenaries|mercenary|scouts?|enemies|spearmen|swordsmen|sailors?|thieves|rangers?|wizards?|cavalry|cavilry|cavalrymen|horsemen|infantry"
+    r"mercenaries|mercenary|scouts?|enemies|spearmen|swordsmen|sailors?|thieves|rangers?|wizards?|cavalry|cavilry|cavalrymen|horsemen|infantry|wargs?|dragons?|trolls?|monks?|cultists?|villagers?|farmers?|peasants?|hunters?|priests?|militia|defenders?|attackers?"
 )
-ASSET_NOUNS = r"horses?|wargs?|ships?|boats?|camels?|wagons?|catapults?|dragons?"
+ASSET_NOUNS = r"horses?|ships?|boats?|camels?|wagons?|catapults?"
 FIGHTERS = re.compile(rf"\b(?:{FIGHTER_NOUNS}|army|armies|enemy|siege|camped|surround(?:ed|s)?)\b", re.I)
 OPEN_ASK = re.compile(
-    r"\b(how (?:do|would|should|can|could|might) (?:i|we|you)|what (?:do|should|would|can) (?:i|we|you)|best (?:plan|way)|what if|any ideas|strategy|"
+    r"\b(how (?:do|would|should|can|could|might) (?:i|we|you)|what (?:do|should|would|can) (?:i|we|you)|best (?:plan|way)|what if|any ideas|strategy|what'?s the plan|"
     r"(?:is there )?(?:something|anything) (?:i|we) can do|help me (?:with )?(?:a )?(?:plan|fight|defend|hold|win))\b",
     re.I,
 )
@@ -25,7 +25,7 @@ NOTES = (
     (re.compile(r"\bno help\b|\bhelp (?:isn'?t|is not) coming\b", re.I), "No help is coming."),
 )
 UNSTATED_LOSS_NOTE = "The enemy has taken losses, number unknown, so their count may be high."
-THE_REST = re.compile(r"\b(?:the )?rest (?:of them )?are ([a-z]+(?: [a-z]+)?)", re.I)
+THE_REST = re.compile(r"\b(?:the )?rest (?:of them )?(?:are )?((?:on |with )?[a-z]+(?: (?!and\b|but\b)[a-z]+)?)", re.I)
 NOW_WHAT = re.compile(r"\b(now what|what now|what next|what's next|what then|then what)\b", re.I)
 WHAT_IF_NUMBER = re.compile(r"\bwhat if\b.*\d", re.I)
 SKIP_COUNCIL = re.compile(r"\b(just (?:plan|tell|give|say)|no time|don'?t know|not sure|you decide|no idea|you tell me)\b", re.I)
@@ -43,7 +43,8 @@ WITH_KIT = re.compile(rf"(?<![\d:.])({N})\s+(with\s+[a-z]+(?:\s+and\s+[a-z]+)?)\
 NEW_TOTAL = re.compile(r"\b(only|now|actually|there are|what if)\b", re.I)
 UNSTATED_LOSSES = re.compile(r"\b(?:took out|killed|shot|cut down|slew|slain)\b.*\b(?:good number|many|some|several|lots|a few|plenty|dozens)\b", re.I)
 WON =re.compile(r"\b(?:we (?:won|have won)|victory is ours|(?:they|the \w+|their army) (?:have |has )?(?:fled|retreated|surrendered|ran away|broke and ran|are gone|are fleeing|are retreating)|they're (?:gone|fleeing|retreating))\b", re.I)
-WAR_TALK_WORDS = re.compile(r"\b(attack\w*|charg\w*|arrows?|withdr\w+|retreat\w*|ambush\w*|flank\w*|breach\w*|shot|killed)\b", re.I)
+WAR_TALK_WORDS = re.compile(r"\b(attack\w*|charg\w*|arrows?|withdr\w+|retreat\w*|ambush\w*|flank\w*|breach\w*|shot|killed|dead|climb\w*|ladders?|rams?|burn\w*|fire|coming|behind us|pulled back|pushed back|holding|held|broke through|got through)\b", re.I)
+OURS_DIED = re.compile(rf"\b({N}) of (?:mine|ours|us|my [a-z]+|our [a-z]+)\s+(?:are dead|are down|died|fell|have fallen|were killed)\b", re.I)
 OURS_BEFORE = re.compile(r"(?:\b(?:my|our)\s+(?:[a-z-]+\s+)?|\b(?:we|i)(?:'ve|'d)?(?:\s+(?:have|had|got|only|still|just|now|are|about|around|nearly|a))*\s*)$", re.I)
 # Words between two counts that mean the second belongs to someone else. "10 men with me, 3 archers" has none of them.
 OTHER_SIDE = re.compile(r"\b(against|versus|vs|fight\w*|fac\w+|caught|attack\w*|chas\w+|surround\w*|hold\w*|they|them|their|enemy|while|but|are|is|have|has|had|see|saw)\b", re.I)
@@ -71,6 +72,16 @@ ASKS_AGAIN = "Noted, my dear. But I can't move a single piece until I know your 
 COUNCIL_LINES = (ASKS_BOTH, ASKS_OURS, ASKS_THEIRS, ASKS_GROUND, ASKS_AGAIN)
 NO_ARMY = "Then you've no army left, my dear, only me. Slip away while you can, and we'll raise another."
 VICTORY_LINE = "Ha! The field is yours, my dear. Songs will be sung, and every one of them will leave me out. Now, shall we discuss the crown?"
+
+
+SIDES_SYSTEM = (
+    "Someone is telling you about a battle in a story or game, and they are on one side of it. Label each numbered group US for the teller's side, or THEM for the enemy. "
+    "People who are trapped, besieged or defending are usually the teller's side when they say we, I or our. Answer with one line per group and nothing else.\n\n"
+    "Example:\nSaid: Our village is under attack. 30 farmers are holding the barn against 200 wolves.\nGroups: 1. 30 farmers 2. 200 wolves\n1 US\n2 THEM\n\n"
+    "Example:\nSaid: Trolls are at the ford, about 40 of them. I have 9 rangers and 6 riders.\nGroups: 1. 40 trolls 2. 9 rangers 3. 6 riders\n1 THEM\n2 US\n3 US"
+)
+SIDE_LINE = re.compile(r"^\W*(\d+)\W+(US|THEM)\b", re.I | re.M)
+_sides_read = {}  # message text -> whose side each of its groups is on, as read by the model
 
 
 def _number(text):
@@ -118,6 +129,7 @@ class Campaign:
     their_things: dict = field(default_factory=dict)
     ground: list = field(default_factory=list)
     notes: list = field(default_factory=list)
+    positions: dict = field(default_factory=dict)  # unit -> {place: how many}
 
     @property
     def our_total(self):
@@ -154,6 +166,9 @@ class Campaign:
         lines = [f"Enemy: {listed(self.theirs, self.their_things)}.", f"Us: {listed(self.ours, self.our_things)}."]
         if self.ground:
             lines.append(f"Ground mentioned: {', '.join(self.ground)}.")
+        placed = [f"{count} {unit} at the {place}" for unit, places in self.positions.items() for place, count in places.items() if count]
+        if placed:
+            lines.append(f"Where ours stand now: {', '.join(placed)}.")
         lines += self.notes
         ratio = self.ratio()
         if ratio:
@@ -174,8 +189,17 @@ class Campaign:
     def _updates(self, sentence):
         """Losses and reinforcements change the sheet. Returns True if this sentence was one."""
         found = False
+        # "The scouts were spotted, and 4 of them were killed" means our scouts, not theirs.
+        ours_fell = re.search(rf"({N}) of them (?:were killed|died|fell|are dead)\b", sentence, re.I)
+        named = ours_fell and _find_unit(sentence[: ours_fell.start()], self.ours)
+        if named:
+            self._take(self.ours, _number(ours_fell.group(1)), named)
+            return True
         for match in WE_LOST.finditer(sentence):
             self._take(self.ours, _number(match.group(1)), match.group(2))
+            found = True
+        for match in OURS_DIED.finditer(sentence):
+            self._take(self.ours, _number(match.group(1)))
             found = True
         for match in THEY_LOST.finditer(sentence):
             self._take(self.theirs, _number(match.group(1) or match.group(2)))
@@ -213,7 +237,16 @@ class Campaign:
         return [item[1:] for item in sorted(found, key=lambda item: item[0])]
 
     def read_message(self, text):
+        original = text
         text = _SPELLED.sub(lambda match: SPELLED[match.group(1).lower()], safety.FICTION.sub(" ", text))
+        counts = self._read_counts(text)
+        # The model is better at telling whose side a group is on, and can't change the numbers from here.
+        sides = _sides_read.get(original)
+        if sides and len(sides) == len(counts):
+            counts = [(ours, noun, count) for ours, (_, noun, count) in zip(sides, counts)]
+        self._apply(text, counts)
+
+    def _read_counts(self, text):
         counts = []
         for sentence in SENTENCES.split(re.sub(r"!+\s+", ". ", text)):
             if self._updates(sentence):
@@ -224,13 +257,16 @@ class Campaign:
                     and sum(count for _, _, count in found) <= counts[-1][2]:
                 found = [(True, noun, count) for _, noun, count in found]
             counts += found
+        return counts
+
+    def _apply(self, text, counts):
         # Both sides named at once is a new battle, unless they're only changing a number.
         if any(ours for ours, noun, _ in counts if noun and not _is_asset(noun)) and any(not ours for ours, noun, _ in counts if noun and not _is_asset(noun)):
             self.ours, self.theirs, self.our_things, self.their_things, self.ground, self.notes = {}, {}, {}, {}, [], []
         rest = THE_REST.search(text)
         for is_ours, side, things in ((True, "ours", "our_things"), (False, "theirs", "their_things")):
             mine = [(noun, count) for ours, noun, count in counts if ours == is_ours]
-            people = _people([item for item in mine if not (item[0] and _is_asset(item[0]))], rest.group(1).lower() if rest and not is_ours else None)
+            people = _people([item for item in mine if not (item[0] and _is_asset(item[0]))], rest.group(1).lower() if rest else None)
             owned = {_plural_key(noun): count for noun, count in mine if noun and _is_asset(noun)}
             is_a_part = not is_ours and self.their_total > sum(people.values()) and not NEW_TOTAL.search(text)
             if people and not is_a_part:
@@ -346,10 +382,195 @@ def council(messages):
     return None
 
 
-def brief(messages):
+# "Keep your archers" isn't a place, and nor is "done well".
+PLACE_WORDS = GROUND.pattern[3:-3].replace("|well", "") + r"|camp|citadel|(?<=the )keep|courtyard|yard|breach|ridge"
+PLACE = re.compile(rf"\b(?:{PLACE_WORDS})\b", re.I)
+UNIT_ALIASES = (
+    {"horse", "horses", "rider", "riders", "horseman", "horsemen", "cavalry", "cavilry", "cavalryman", "cavalrymen", "mounted"},
+    {"shield", "shields", "shieldbearer", "shieldbearers", "shieldman", "shieldmen"},
+    {"sword", "swords", "swordsman", "swordsmen"},
+    {"spear", "spears", "spearman", "spearmen"},
+    {"archer", "archers", "bowman", "bowmen", "bow", "bows"},
+    {"man", "men", "soldier", "soldiers", "troop", "troops", "warrior", "warriors"},
+)
+NOT_A_UNIT_WORD = {"with", "on", "and", "other", "more", "the", "their", "our", "my", "all"}
+MOVE_LINE = re.compile(r"^\W*(\d[\d,]*)\s+([^:\n]+?)\s*:\s*(.+)$", re.M)
+THREATS = (
+    ("the siege weapons", re.compile(r"\bs(?:ie|ei)ge\b|\bcatapults?\b|\btrebuchets?\b|\bbattering\b|\bram(?:s|ming)?\b", re.I), re.compile(r"\bs(?:ie|ei)ge\b|\bweapons?\b|\bengines?\b|\bcatapults?\b|\btrebuchets?\b|\brams?\b|\bcrews?\b", re.I)),
+    ("the breach", re.compile(r"\b(?:walls?|gates?)\b.*\b(?:break\w*|crack\w*|fall\w*|crumbl\w*|giv\w+ way|burn\w*|collaps\w*)\b|\bbreach\w*\b", re.I), re.compile(r"\bwalls?\b|\bgates?\b|\bbreach\b|\bfall back\b|\bkeep\b|\bcitadel\b|\bcourtyard\b", re.I)),
+    ("the climbers", re.compile(r"\b(?:climb\w*|scal\w+|ladders?)\b", re.I), re.compile(r"\bclimb\w*\b|\bladders?\b|\bwalls?\b|\bpush\b|\bshoot\b", re.I)),
+    ("the attack from behind", re.compile(r"\bbehind (?:us|our)\b|\bflank\w*\b|\bsurround\w*\b", re.I), re.compile(r"\bbehind\b|\bflank\w*\b|\brear\b|\bturn\b|\bfall back\b|\bbreak out\b", re.I)),
+)
+URGENT = re.compile(r"\b(?:break\w*|crack\w*|fall\w*|crumbl\w*|collaps\w*|breach\w*|overrun|burn\w*|dying|help)\b.*!|!.*\b(?:break\w*|fall\w*|breach\w*)\b|\b(?:walls?|gates?)\b.*\b(?:breaking|falling|collapsing|down)\b", re.I)
+_placed_after_reply = {}  # what a reply ordered, keyed by its text, because the page only sends the words back
+
+
+def _unit_words(text):
+    words = {word for word in re.findall(r"[a-z]+", text.lower().replace("-", "")) if word not in NOT_A_UNIT_WORD}
+    for group in UNIT_ALIASES:
+        if words & group:
+            words |= group
+    return words
+
+
+def _find_unit(text, units):
+    words = _unit_words(text)
+    return next((unit for unit in units if _unit_words(unit) & words), None)
+
+
+def _clean_place(text):
+    return re.sub(r"(?<!s)s$", "", text.lower().strip(" .,;:!").removeprefix("the "))
+
+
+def _place_in(text):
+    # "field, move to the wall" ends up at the wall.
+    going = re.search(rf"\b(?:move|ride|go|fall back|rush|head|run|retreat|withdraw|charge|march)\w*\s+(?:back\s+)?(?:to|into|toward|towards)\s+(?:the\s+)?((?:{PLACE_WORDS}))\b", text, re.I)
+    if going:
+        return _clean_place(going.group(1))
+    found = PLACE.search(text)
+    return _clean_place(found.group(0) if found else re.split(r"[,.;(]| to ", text)[0])
+
+
+def _form_line(work, label):
+    found = re.search(rf"^\W*{label}\W*(.*)$", work, re.I | re.M)
+    return found.group(1).strip() if found else ""
+
+
+def _moves_block(work):
+    parts = re.split(r"^\W*MOVES\W*$", work, maxsplit=1, flags=re.I | re.M)
+    return re.split(r"^\W*CONCLUSION", parts[1], maxsplit=1, flags=re.I | re.M)[0] if len(parts) == 2 else ""
+
+
+def read_moves(work):
+    """Every "3 archers: cliffs, shoot the crews" line in the form, as (count, who, where, the whole order)."""
+    return [(_number(count), who.strip(), _place_in(where), where.strip()) for count, who, where in MOVE_LINE.findall(_moves_block(work))]
+
+
+def _fit(places, total):
+    """Losses come off the largest group, because nobody has said where they fell."""
+    places = dict(places)
+    while sum(places.values()) > total:
+        places[max(places, key=places.get)] -= 1
+    return {place: count for place, count in places.items() if count > 0}
+
+
+def _reports(text, units):
+    """"Our archers are on the cliffs" tells us where they are, whatever he last ordered."""
+    found = {}
+    for clause in re.split(r"[.,;!?]|\bbut\b", text):
+        places = {_clean_place(match) for match in re.findall(rf"\b(?:from|on|in|at|to|into|atop|behind)\s+(?:the\s+)?((?:{PLACE_WORDS}))\b", clause, re.I)}
+        unit = _find_unit(clause, units)
+        if unit and len(places) == 1 and not re.search(r"\b(?:what if|should|could|would|if)\b", clause, re.I):
+            found[unit] = places.pop()
+    return found
+
+
+def positions_now(messages, units):
+    """Where each unit stands: the last order we know of, then anything the user has said since."""
+    placed, reports = {}, []
+    for message in messages:
+        if message["role"] == "assistant":
+            remembered = _placed_after_reply.get(message["content"].strip())
+            if remembered is not None:
+                placed, reports = remembered, []
+        else:
+            reports.append(message["content"])
+    placed = {unit: dict(places) for unit, places in placed.items()}
+    for text in reports:
+        for unit, place in _reports(text, units).items():
+            placed[unit] = {place: units[unit]}
+    return {unit: _fit(places, units[unit]) for unit, places in placed.items() if unit in units}
+
+
+def campaign_for(messages):
+    campaign = read(_asked(messages))
+    campaign.positions = positions_now(messages, campaign.ours)
+    return campaign
+
+
+def placed_after(work, campaign):
+    """Where everyone stands once this form's moves are carried out. Anyone not mentioned stays put."""
+    placed = {unit: dict(places) for unit, places in campaign.positions.items()}
+    ordered = {}
+    for count, who, where, _ in read_moves(work):
+        unit = _find_unit(who, campaign.ours)
+        if unit:
+            ordered.setdefault(unit, {})
+            ordered[unit][where] = ordered[unit].get(where, 0) + count
+    placed.update(ordered)
+    return {unit: _fit(places, campaign.ours[unit]) for unit, places in placed.items() if unit in campaign.ours}
+
+
+def remember(reply, work, campaign):
+    _placed_after_reply[reply.strip()] = placed_after(work, campaign)
+
+
+def is_urgent(text):
+    return bool(URGENT.search(text))
+
+
+def problems(work, campaign, latest):
+    """What's wrong with a filled-in form, in words the model can act on. Code can't judge a plan, but it can count."""
+    found = []
+    moves = read_moves(work)
+    said = re.split(r"conclusion\W*", work, flags=re.I)[-1] if re.search(r"conclusion", work, re.I) else ""
+    if not said.strip() or not re.search(r"[.!?]", said):
+        found.append("The form must end with a finished CONCLUSION line.")
+    if not moves:
+        return found + ["The MOVES block is missing. Give every group on the sheet its own line, like \"3 archers: wall, shoot the crews\"."]
+    used = {}
+    for count, who, _, _ in moves:
+        unit = _find_unit(who, campaign.ours)
+        if unit is None:
+            found.append(f"\"{who}\" isn't on the campaign sheet. Use only: {', '.join(campaign.ours)}.")
+        else:
+            used[unit] = used.get(unit, 0) + count
+    for unit, count in used.items():
+        if count > campaign.ours[unit]:
+            found.append(f"You sent {count} {unit}, but there are only {campaign.ours[unit]}, and nobody can be in two places.")
+    orders = " ".join(where for _, _, _, where in moves)
+    for name, news, answers in THREATS:
+        if news.search(latest) and not answers.search(orders):
+            found.append(f"None of the moves deals with {name}, which is what the user just reported.")
+    after = placed_after(work, campaign)
+    for clause in re.split(r"[.,;!?]", said):
+        places = {_clean_place(match) for match in PLACE.findall(clause)}
+        if not places:
+            continue
+        for unit in campaign.ours:
+            mentioned = _unit_words(unit) & set(re.findall(r"[a-z]+", clause.lower().replace("-", "")))
+            if mentioned and unit in after and not places & set(after[unit]):
+                found.append(f"The CONCLUSION puts the {unit} at the {sorted(places)[0]}, but your MOVES say {', '.join(after[unit])}.")
+    return found
+
+
+def _groups_in(text):
+    spelled = _SPELLED.sub(lambda match: SPELLED[match.group(1).lower()], safety.FICTION.sub(" ", text))
+    return Campaign()._read_counts(spelled)
+
+
+def sides_to_read(messages):
+    """(message, the user prompt) for each message whose groups the model hasn't labelled yet."""
+    asked, wanted = _asked(messages), []
+    for index, text in enumerate(asked):
+        groups = _groups_in(text)
+        if groups and text not in _sides_read:
+            listed = " ".join(f"{number}. {count} {noun or 'people'}" for number, (_, noun, count) in enumerate(groups, 1))
+            wanted.append((text, f"Said: {' '.join(asked[: index + 1])}\nGroups: {listed}"))
+    return wanted
+
+
+def record_sides(text, answer):
+    """Keep the model's labels only if there's one for every group. Otherwise the patterns' reading stands."""
+    labels = {int(number): side.upper() == "US" for number, side in SIDE_LINE.findall(answer)}
+    size = len(_groups_in(text))
+    _sides_read[text] = [labels[number] for number in range(1, size + 1)] if set(labels) == set(range(1, size + 1)) else None
+
+
+def brief(messages, note=""):
     """What the planner's form works from: the sheet, then what was said, so old figures can't beat new ones."""
     asked = _asked(messages)
-    campaign = read(asked)
+    campaign = campaign_for(messages)
     since = []
     for text in asked:
         if campaign.active and (since or is_tactics(text)) and not safety.names_real_people(text):
@@ -359,4 +580,9 @@ def brief(messages):
     if earlier:
         lines.append("Earlier: " + " ".join(earlier))
     lines.append("Now: " + asked[-1])
+    for name, news, _ in THREATS:
+        if news.search(asked[-1]):
+            lines.append(f"One line of your MOVES must name {name} and say how that group stops them.")
+    if note:
+        lines.append(note)
     return "\n".join(lines)

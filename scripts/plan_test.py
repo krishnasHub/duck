@@ -88,11 +88,12 @@ def run(mode, messages):
             return complete(prompt, max_tokens=max_tokens, temperature=0.0, strip=False)
 
         if mode != "planner_nocheck":
-            fighting = mode != "planner_noform" and planner.in_war(messages)
-            work_system = planner.work_system(messages) if fighting else planner.WORK_SYSTEM
-            sheet = war.read([m["content"] for m in messages if m["role"] == "user"]).sheet() if fighting else ""
-            source = planner.work_messages(messages) if fighting else [{"role": "user", "content": "\n".join(m["content"] for m in messages if m["role"] == "user")}]
-            work, first, fixes = planner.work_with_sums(generate, render(work_system, source), messages[-1]["content"], sheet)
+            if mode != "planner_noform" and planner.in_war(messages):
+                work, first, wrong = planner.plan_battle(generate, render, messages)
+                reply, why = planner.final_reply("", work, messages)
+                return reply, first, f"{work} || STILL WRONG: {wrong} || REPLACED: {why}"
+            source = [{"role": "user", "content": "\n".join(m["content"] for m in messages if m["role"] == "user")}]
+            work, first, fixes = planner.work_with_sums(generate, render(planner.WORK_SYSTEM, source), messages[-1]["content"])
         else:
             work, first = generate(render(planner.WORK_SYSTEM, planner.work_messages(messages)), planner.WORK_TOKENS)
             fixes = []

@@ -107,7 +107,9 @@ REAL_PEOPLE = re.compile(
 )
 VIOLENCE = re.compile(
     r"\b(?:kill|killing|murder|harm|harming)\b(?!\s+(?:me|myself|us)\b)"
-    r"|\bhurt(?:ing)?\b(?!\s+(?:me|myself|us|my\s+(?:feelings|back|knee|head|neck|foot|leg|arm|hand|shoulder|pride))\b)"
+    # "I'm hurt", "got hurt" and "hurt her feelings" are someone in pain, not someone planning violence.
+    r"|(?<!i'm )(?<!im )(?<!am )(?<!was )(?<!is )(?<!are )(?<!were )(?<!got )(?<!get )(?<!been )(?<!being )(?<!feel )(?<!felt )(?<!feeling )(?<!so )(?<!really )(?<!very )(?<!still )"
+    r"\bhurt(?:ing)?\b(?!\s+(?:me|myself|us|my\s+(?:feelings|back|knee|head|neck|foot|leg|arm|hand|shoulder|pride))\b)(?!(?:\s+\S+){0,2}\s+feelings\b)"
     r"|\b(?:attack|attacking|ambush|ambushing|stab|stabbing|poison|poisoning|strangle|beat(?:ing)? (?:him|her|them|up)|burn down|blow up|bomb)\b"
     r"|\bshoot(?:ing)?\s+(?:him|her|them|my|our|the)\b(?!\s+(?:ball|photos?|video))"
     r"|\b(?:cut|take|run)\s+(?:him|her|them)\s+(?:down|out|over)\b|\bget rid of (?:him|her|them)\b",

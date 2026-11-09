@@ -31,6 +31,7 @@ personas/*/*
 !personas/*/lore_flourishes.txt
 !personas/*/war_flourishes.txt
 !personas/*/war_questions.txt
+!personas/*/war_urgent.txt
 !personas/*/eval*.txt
 !personas/*/plan_cases*.jsonl
 !personas/*/replay_*.txt

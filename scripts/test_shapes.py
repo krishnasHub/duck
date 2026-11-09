@@ -113,12 +113,9 @@ check("ordinary phrases aren't taken for an echo", not planner.leaked_note("I'd 
 
 FORM = "SIDES: They outnumber us 5 to 1.\nPLAN: 1. All 20 men wait.\nCONCLUSION: At 5 to 1, don't fight directly. Send all 20 men by night to scatter the horses."
 FIGHT = [{"role": "user", "content": "100 soldiers are camped outside. We have 20 men. How do we stop them?"}]
-PLAN_SAID = "Send all 20 men by night to scatter the horses, my dear."
-check("a voiced plan is kept without the ratio", planner.final_reply(PLAN_SAID, FORM, FIGHT)[0] == PLAN_SAID)
-check("a force changed in words is replaced", planner.final_reply("Send two riders to the horses.", FORM, FIGHT)[1].startswith("new numbers"))
-check("a list read aloud is replaced", planner.final_reply("1. All 20 men wait. 2. They strike.", FORM, FIGHT)[1] == "read out a list")
-check("a reply that wanders off the plan is replaced", planner.final_reply("Ask for a truce, and offer them gold or a prisoner in return.", FORM, FIGHT)[1] == "changed the plan")
-check("mentioning having worked it out is replaced", planner.final_reply("I've worked this out for you.", FORM, FIGHT)[1] == "mentioned the working")
+check("a battle says the form's last line, with no voice step", planner.final_reply("", FORM, FIGHT)[0].startswith("At 5 to 1, don't fight directly."))
+check("a battle form with no finished line gets a fixed line", planner.final_reply("", "SIDES: They outnumber us 5 to 1.", FIGHT)[0] == planner.LOST_THREAD)
+check("he doesn't open every line with 'my dear'", planner.final_reply("", "CONCLUSION: My dear, the gate is lost.", FIGHT)[0] == "The gate is lost.")
 check("a conclusion cut off mid-sentence loses the unfinished part", planner.conclusion("CONCLUSION: At 5 to 1, don't fight. Use the") == "At 5 to 1, don't fight.")
 check("a conclusion with no finished sentence counts as none", planner.conclusion("CONCLUSION: At 5 to 1, don't") == "")
 later = [{"role": "user", "content": "My 80 riders face 40 archers. What do I do?"}, {"role": "assistant", "content": "Ride round."}, {"role": "user", "content": "What if I only had 10 riders?"}]

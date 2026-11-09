@@ -86,6 +86,8 @@ war_file = persona_dir(args.persona) / "war_flourishes.txt"
 war_flourishes = war_file.read_text(encoding="utf-8").strip().splitlines() if war_file.exists() else []
 questions_file = persona_dir(args.persona) / "war_questions.txt"
 war_questions = questions_file.read_text(encoding="utf-8").strip().splitlines() if questions_file.exists() else []
+urgent_file = persona_dir(args.persona) / "war_urgent.txt"
+war_urgent = urgent_file.read_text(encoding="utf-8").strip().splitlines() if urgent_file.exists() else []
 NOT_RECALLED = re.compile(r"can't recall|don't recall|won't make it up|isn't in my memory|holds nothing|no memory", re.I)
 
 CANT_RECALL = "I can't recall that, and I won't make it up."
@@ -170,17 +172,20 @@ def work_out(messages, temperature, max_new_tokens, notes):
     started = time.time()
     fighting = planner.in_war(messages)
     # A campaign reads the whole chat, so its numbers outlast the short window.
-    source = messages if fighting else window
-    sheet = war.read([m["content"] for m in messages if m["role"] == "user"]).sheet() if fighting else ""
     with gpu_lock:
         def generate(prompt, max_tokens):
             text = llama.complete(prompt, None, 0.0, max_tokens)
             return text, llama.last_tokens
 
-        work, tokens_used, fixes = planner.work_with_sums(generate, render_prompt(tokenizer, planner.work_system(messages), planner.work_messages(source)), messages[-1]["content"], sheet)
-        voice_system = f"{with_memory(system, notes)}\n\n{planner.voice_instructions(work, messages)}"
-        voiced = llama.complete(fit_prompt(voice_system, window), "everyday", min(temperature, 0.3), max_new_tokens)
-        tokens_used += llama.last_tokens
+        if fighting:
+            # He says his line inside the form. A separate voice step wandered off the decision it was given.
+            work, tokens_used, fixes = planner.plan_battle(generate, lambda form, said: render_prompt(tokenizer, form, said), messages)
+            voiced = ""
+        else:
+            work, tokens_used, fixes = planner.work_with_sums(generate, render_prompt(tokenizer, planner.work_system(messages), planner.work_messages(window)), messages[-1]["content"])
+            voice_system = f"{with_memory(system, notes)}\n\n{planner.voice_instructions(work, messages)}"
+            voiced = llama.complete(fit_prompt(voice_system, window), "everyday", min(temperature, 0.3), max_new_tokens)
+            tokens_used += llama.last_tokens
     reply, replaced = planner.final_reply(voiced, work, messages)
     total = time.time() - started
     stats = {"tokens": tokens_used, "first_token_s": round(total, 2), "total_s": round(total, 2), "tokens_per_s": round(tokens_used / total, 1)}
@@ -374,6 +379,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         fighting = tuned and planner.in_war(messages)
         if fighting:
+            try:
+                with gpu_lock:
+                    for said, listed in war.sides_to_read(messages):
+                        war.record_sides(said, llama.complete(render_prompt(tokenizer, war.SIDES_SYSTEM, [{"role": "user", "content": listed}]), None, 0.0, 30))
+            except OSError:
+                pass  # the patterns' reading stands
             question = war.council(messages)
             if question:
                 send({"text": question})
@@ -400,9 +411,16 @@ class Handler(BaseHTTPRequestHandler):
             # A fixed closing line brings his voice back to a plan, with no chance of changing a number or a step.
             # In a battle under way, he usually hands the turn back, so the story moves.
             if fighting and reply != planner.LOST_THREAD:
-                closing = war_questions if war.is_next_move(messages) and random.random() < 0.7 else war_flourishes
-                if closing and (closing is war_questions or random.random() < 0.6):
+                if war.is_urgent(latest):
+                    closing = war_urgent
+                else:
+                    # "What do you see from the walls?" makes no sense in a swamp.
+                    has_walls = "wall" in " ".join(war.read(asked).ground)
+                    fitting = [line for line in war_questions if has_walls or "walls" not in line]
+                    closing = fitting if war.is_next_move(messages) and random.random() < 0.7 else war_flourishes
+                if closing and not reply.endswith("?") and (closing is not war_flourishes or random.random() < 0.6):
                     reply += " " + random.choice(closing)
+                war.remember(reply, work, war.campaign_for(messages))
             send({"working": work})
             send({"text": reply})
             send({"done": stats})

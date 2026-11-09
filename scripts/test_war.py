@@ -28,6 +28,58 @@ check("reads their horses as theirs, not as fighters", sheet.their_things == {"h
 check("reads ours", sheet.ours == {"men": 20}, sheet)
 check("reads the ground", "woods" in sheet.ground and "walls" in sheet.ground, sheet)
 check("works out the ratio", "They outnumber us 5 to 1." in sheet.sheet(), sheet.sheet())
+fort = chat("How should I defend a fort against 400 orcs? I have 30 men: 10 archers, 15 spearmen and the rest on horses.")
+fort_sheet = war.campaign_for(fort)
+check("'the rest on horses' names the rest", fort_sheet.ours == {"archers": 10, "spearmen": 15, "on horses": 5}, fort_sheet)
+GOOD = "CHANGED: x.\nDANGER: y.\nMOVES\n10 archers: wall, shoot the ram crew\n15 spearmen: gate, hold\n5 riders: road, burn the rams\nCONCLUSION: Hold fast, my dear. Your 15 spearmen stay at the gate."
+check("a form that adds up passes", war.problems(GOOD, fort_sheet, "They've brought battering rams!") == [], war.problems(GOOD, fort_sheet, "They've brought battering rams!"))
+check("moves are read", war.read_moves(GOOD)[2][:3] == (5, "riders", "road"), war.read_moves(GOOD))
+TWICE = GOOD.replace("15 spearmen: gate, hold", "15 spearmen: gate, hold\n5 on horses: wall, hold")
+check("nobody can be in two places", any("only 5" in p for p in war.problems(TWICE, fort_sheet, "It's quiet")), war.problems(TWICE, fort_sheet, "It's quiet"))
+check("people not on the sheet are refused", any("isn't on the campaign sheet" in p for p in war.problems(GOOD.replace("5 riders", "5 wizards"), fort_sheet, "It's quiet")))
+IGNORES = GOOD.replace("shoot the ram crew", "watch").replace("burn the rams", "wait")
+check("an order that ignores the rams is sent back", any("siege" in p for p in war.problems(IGNORES, fort_sheet, "They've brought battering rams!")))
+check("a misspelled threat counts too", any("siege" in p for p in war.problems(IGNORES, fort_sheet, "They're preping their seige weapons")))
+check("a wall breaking wants an answer", any("breach" in p for p in war.problems(GOOD.replace("wall,", "river,").replace("gate,", "road,").replace("at the gate", "on the road"), fort_sheet, "the walls are breaking!")))
+check("the spoken line can't move people away from their orders", any("CONCLUSION puts" in p for p in war.problems(GOOD.replace("stay at the gate", "ride to the woods"), fort_sheet, "It's quiet")))
+check("no moves at all is a problem", any("MOVES block" in p for p in war.problems("CONCLUSION: Fine, my dear.", fort_sheet, "It's quiet")))
+check("no conclusion is a problem", any("CONCLUSION" in p for p in war.problems("MOVES\n10 archers: wall, hold\n", fort_sheet, "It's quiet")))
+war.remember("Hold fast.", GOOD, fort_sheet)
+after = [*fort, {"role": "assistant", "content": "Hold fast."}, {"role": "user", "content": "It's quiet"}]
+placed = war.campaign_for(after)
+check("positions carry over to the next turn", placed.positions.get("spearmen") == {"gate": 15} and "15 spearmen at the gate" in placed.sheet(), placed)
+check("'Keep your archers' isn't a place", not any("CONCLUSION puts" in p for p in war.problems(GOOD.replace("Your 15 spearmen stay at the gate", "Keep your 10 archers at it"), fort_sheet, "It's quiet")))
+check("'the pass' stays a pass", war.read_moves("MOVES\n3 rangers: the pass, hold\nCONCLUSION: Go.")[0][2] == "pass")
+wargs = war.read(["My 8 dwarves hold a mine against 70 wargs and their 20 riders. What should we do?"])
+check("wargs fight, so they count", wargs.their_total == 90 and "11.2 to 1" in wargs.sheet(), wargs.sheet())
+check("'two of mine are dead' comes off ours", war.read(["My 8 dwarves face 70 wargs. What should we do?", "Two of mine are dead"]).our_total == 6)
+KEEP = "How would you defend our keep? About 200 goblins are camped outside our walls and woods."
+check("'coming from behind us' stays in the war", war.wants_plan(chat(KEEP, war.ASKS_OURS, "We have 12 men", "A plan.", "The rocks are clear but now they're coming from behind us too")))
+check("dinner still leaves a war", not war.wants_plan(chat(KEEP, war.ASKS_OURS, "We have 12 men", "A plan.", "Anyway, what should I have for dinner?")))
+check("'4 of them were killed' after naming our scouts comes off ours", war.read(["We have 5 wizards and 20 scouts against 600 orcs. How should we get past?", "The scouts were spotted, and 4 of them were killed"]).ours == {"wizards": 5, "scouts": 16})
+check("'What's the plan?' opens a council", war.is_tactics("A dragon and 80 cultists are attacking our monastery. I've got 30 monks. What's the plan?"))
+check("'ramming' counts as a siege threat", "must name the siege weapons" in war.brief(chat("How do I fight 100 pirates with my 10 men?", "A plan.", "Their ships are ramming the chain")))
+for sad in ["My friend keeps ignoring my texts and I'm hurt. What's the plan here?", "I hurt my brother's feelings, what do I do?", "My dad got hurt at work, what should we do?", "My sister and I fought and I feel hurt. What should I do?", "I think I hurt my friend's feelings", "My boss really hurt me. What should I do?"]:
+    check(f"pain isn't violence: {sad}", not safety.is_real_harm([sad]))
+for meant in ["I want to hurt my boss. What's the plan?", "How do I hurt my ex without getting caught?", "How can I hurt my neighbour?", "How do I kill my ex?"]:
+    check(f"violence still is: {meant}", safety.is_real_harm([meant]))
+check("'field, move to the wall' ends at the wall", war.read_moves("MOVES\n3 riders: field, move to the wall to help\nCONCLUSION: Go.")[0][2] == "wall")
+TRAPPED = "In a story I'm writing, 12 rangers are trapped in a mountain pass by 150 goblins. How do we get through?"
+check("patterns alone can't tell whose rangers these are", war.read([TRAPPED]).ours == {})
+wanted = war.sides_to_read(chat(TRAPPED))
+check("the model is asked about each group", len(wanted) == 1 and "1. 12 rangers 2. 150 goblins" in wanted[0][1], wanted)
+war.record_sides(TRAPPED, "1 US\n2 THEM")
+check("the model's sides are used", (lambda c: c.ours == {"rangers": 12} and c.theirs == {"goblins": 150})(war.read([TRAPPED])), war.read([TRAPPED]))
+check("nothing is asked twice", war.sides_to_read(chat(TRAPPED)) == [])
+PARTIAL = "We have 20 men against 90 orcs. What should we do?"
+war.record_sides(PARTIAL, "1 THEM")
+check("a label missing leaves the patterns' reading", war.read([PARTIAL]).ours == {"men": 20}, war.read([PARTIAL]))
+moved = war.campaign_for([*fort, {"role": "assistant", "content": "Hold fast."}, {"role": "user", "content": "Our archers fired from the cliffs. What next?"}])
+check("the user can say where people went", moved.positions.get("archers") == {"cliff": 10}, moved.positions)
+smaller = war.campaign_for([*fort, {"role": "assistant", "content": "Hold fast."}, {"role": "user", "content": "We lost 5 spearmen"}])
+check("losses come off the positions", sum(smaller.positions["spearmen"].values()) == 10, smaller.positions)
+check("urgent news", war.is_urgent("the walls are breaking!") and not war.is_urgent("Doing that, what now?"))
+check("a threat goes in the brief", "must name the siege weapons" in war.brief(chat("How do I fight 100 elves with my 10 men?", "A plan.", "They brought a catapult")))
 riders = war.read(["How would you defend our citadel? About 100 elves are camped outside our walls.", "I have 10 men with me. 3 archers, 4 with shields and 3 on horses"])
 check("'3 on horses' are men, and the parts add up to 10", riders.ours == {"archers": 3, "with shields": 4, "on horses": 3} and not riders.our_things, riders)
 check("a misspelled 'seige' still counts as siege weapons", "The enemy has siege weapons." in war.read(["How should we fight 100 elves? We have 10 men.", "They're preping their seige weapons to break the walls"]).notes)
@@ -99,9 +151,15 @@ check("a win ends the campaign", not war.read([m["content"] for m in WIN if m["r
 check("after a win, ordinary chat is ordinary", not war.wants_plan([*WIN, {"role": "assistant", "content": war.VICTORY_LINE}, {"role": "user", "content": "That was fun. What's for dinner?"}]))
 check("'they won't retreat' isn't a win", war.council(chat(START, war.ASKS_OURS, "We have 12 men", "A plan.", "They won't retreat, they press on!")) != war.VICTORY_LINE)
 check("a win with no war is nothing", not war.just_won(chat("They fled into the woods!")))
-in_voice = "Now they're distracted, so strike at the wall, and let the others go for the camp."
-worked = "CHANGED: They are distracted.\nORDER: Strike at the wall and go for the camp.\nCONCLUSION: Strike at the wall."
-check("a line in his voice that keeps to the working survives", planner.final_reply(in_voice, worked, chat(START))[1] == "")
+tries = []
+def scripted(prompt, max_tokens):
+    tries.append(prompt)
+    if len(tries) == 1:
+        return "CHANGED: x.\nDANGER: y.\nMOVES\n50 men: wall, hold\nCONCLUSION: Hold fast.", 10
+    return "CHANGED: x.\nDANGER: y.\nMOVES\n12 men: wall, hold\nCONCLUSION: Hold fast.", 10
+work, used, wrong = planner.plan_battle(scripted, lambda system, said: said[0]["content"], chat(START, war.ASKS_OURS, "We have 12 men"))
+check("a form that doesn't add up goes back with the reason", len(tries) == 2 and "only 12" in tries[1] and not wrong and "12 men: wall" in work, tries)
+check("retries are limited", planner.BATTLE_TRIES == 2)
 
 check("no numbers gets asked both", war.council(chat("How do we beat the orcs at the river?")) == war.ASKS_BOTH)
 check("no count of ours gets asked", war.council(chat("100 orcs hold the river. How do we beat them?")) == war.ASKS_OURS)
