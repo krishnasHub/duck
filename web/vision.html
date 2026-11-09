@@ -74,6 +74,7 @@ button.stop { background: var(--bad); color: #fff; border-color: var(--bad); fon
     </section>
     <section>
       <button class="stop" id="halt" type="button">Stop following</button>
+      <button id="enroll" type="button" style="margin-top:8px">This is me: follow only this person</button>
     </section>
     <section>
       <h2>Speed</h2>
@@ -267,6 +268,21 @@ $("halt").addEventListener("click", async () => {
   halted = !halted;
   await fetch(halted ? "/api/halt" : "/api/resume", { method: "POST" });
   $("halt").textContent = halted ? "Start following again" : "Stop following";
+  if (halted) showEnrolled(false);
+});
+
+const ENROLL_LABEL = "This is me: follow only this person";
+let enrolled = false;
+
+function showEnrolled(value) {
+  enrolled = value;
+  $("enroll").textContent = value ? "Enrolled by clothes. Follow anyone again" : ENROLL_LABEL;
+}
+
+$("enroll").addEventListener("click", async () => {
+  const response = await fetch(enrolled ? "/api/unenroll" : "/api/enroll", { method: "POST" });
+  const result = await response.json();
+  showEnrolled(result.enrolled);
 });
 
 $("photo").click();

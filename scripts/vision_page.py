@@ -11,11 +11,13 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
+import numpy as np
 from PIL import Image, UnidentifiedImageError
 
 from common import ROOT
 from detect import MODELS, Detector, describe
 from follow import Box, Follower
+from look import signature
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--port", type=int, default=8767)
@@ -33,8 +35,12 @@ follower = Follower()
 lock = threading.Lock()
 
 
-def person_boxes(found):
-    return [Box((d.x1 + d.x2) / 2, (d.y1 + d.y2) / 2, d.x2 - d.x1, d.y2 - d.y1, d.score) for d in found if d.label == "person"]
+def person_boxes(found, image):
+    hsv = np.asarray(image.convert("HSV"))
+    return [
+        Box((d.x1 + d.x2) / 2, (d.y1 + d.y2) / 2, d.x2 - d.x1, d.y2 - d.y1, d.score, look=signature(hsv, (d.x1, d.y1, d.x2, d.y2)))
+        for d in found if d.label == "person"
+    ]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -84,6 +90,14 @@ class Handler(BaseHTTPRequestHandler):
             with lock:
                 follower.resume()
             self.send_json(200, {"state": "idle"})
+        elif self.path == "/api/enroll":
+            with lock:
+                done = follower.enroll()
+            self.send_json(200, {"enrolled": done})
+        elif self.path == "/api/unenroll":
+            with lock:
+                follower.unenroll()
+            self.send_json(200, {"enrolled": False})
         else:
             self.send_json(404, {"error": "not found"})
 
@@ -96,8 +110,9 @@ class Handler(BaseHTTPRequestHandler):
         started = time.perf_counter()
         found = detector.detect(image)
         detect_ms = (time.perf_counter() - started) * 1000
+        boxes = person_boxes(found, image)
         with lock:
-            command = follower.update(person_boxes(found), time.monotonic())
+            command = follower.update(boxes, time.monotonic())
             target = follower.tracker.target
         self.send_json(200, {
             "boxes": [vars(item) for item in found],

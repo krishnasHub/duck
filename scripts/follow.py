@@ -5,6 +5,8 @@ Safety comes first in the design: it stops when it isn't sure, and every command
 """
 from dataclasses import dataclass
 
+import look
+
 
 @dataclass
 class Box:
@@ -15,6 +17,7 @@ class Box:
     h: float
     score: float = 1.0
     tag: object = None
+    look: object = None  # from look.signature, if the caller has one
 
 
 @dataclass
@@ -51,6 +54,7 @@ class Settings:
     gate_base: float = 0.12  # how far a target may appear to jump between frames
     gate_per_second: float = 0.5
     max_size_change: float = 1.6
+    min_look: float = 0.5  # how alike two looks must be to count as the same person
 
 
 def _limit(value, low, high):
@@ -70,9 +74,18 @@ class Tracker:
         self.velocity = (0.0, 0.0)
         self.last_seen = None
         self.sightings = 0
+        self.look = None  # the current target's remembered look
+        self.owner = None  # if set, nobody else is ever followed
 
     def forget(self):
-        self.target, self.velocity, self.last_seen, self.sightings = None, (0.0, 0.0), None, 0
+        self.target, self.velocity, self.last_seen, self.sightings, self.look = None, (0.0, 0.0), None, 0, None
+
+    def _looks_right(self, box, wanted):
+        """A box that can't be read gets the benefit of the doubt, except when only the owner will do."""
+        alike = look.similarity(box.look, wanted)
+        if alike is None:
+            return wanted is None or self.owner is None
+        return alike >= self.s.min_look
 
     def predicted(self, now):
         elapsed = now - self.last_seen
@@ -82,9 +95,12 @@ class Tracker:
 
     def update(self, boxes, now):
         boxes = [box for box in boxes if box.score >= self.s.min_score]
+        if self.owner is not None:
+            boxes = [box for box in boxes if self._looks_right(box, self.owner)]
         if self.target is None:
             if boxes:
                 self.target = max(boxes, key=lambda box: box.h)
+                self.look = self.target.look
                 self.last_seen = now
                 self.sightings = 1
             return self.target if boxes else None
@@ -95,7 +111,7 @@ class Tracker:
         for box in boxes:
             ratio = max(box.h / self.target.h, self.target.h / box.h)
             distance = abs(box.cx - x) + 0.5 * abs(box.cy - y)
-            if ratio > self.s.max_size_change or distance > gate:
+            if ratio > self.s.max_size_change or distance > gate or not self._looks_right(box, self.look):
                 continue
             cost = distance + 0.3 * (ratio - 1)
             if best is None or cost < best_cost:
@@ -109,6 +125,8 @@ class Tracker:
             for old, new, previous in zip(self.velocity, (best.cx, best.cy), (self.target.cx, self.target.cy))
         )
         self.target = best
+        if best.look is not None:
+            self.look = best.look if self.look is None else look.blend(self.look, best.look)
         self.last_seen = now
         self.sightings += 1
         return best
@@ -124,11 +142,22 @@ class Follower:
         self.last_side = 0.0
         self.pan = self.tilt = self.forward = 0.0
 
+    def enroll(self):
+        """Make whoever it's following now the only person it will follow. Returns False if there's nobody to enroll."""
+        if self.tracker.look is None:
+            return False
+        self.tracker.owner = self.tracker.look
+        return True
+
+    def unenroll(self):
+        self.tracker.owner = None
+
     def halt(self):
         """Stop and stay stopped until resume(). Meant for a spoken "stop" or a physical button."""
         self.halted = True
         self.pan = self.tilt = self.forward = 0.0
         self.tracker.forget()
+        self.tracker.owner = None
 
     def resume(self):
         self.halted = False

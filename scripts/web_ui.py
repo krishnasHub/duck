@@ -365,7 +365,7 @@ class Handler(BaseHTTPRequestHandler):
         asked = [m["content"] for m in messages if m["role"] == "user"]
         if tuned and not passages and planner.is_plan(asked):
             # Count-back needs almost no model time, so he has nothing to stall for.
-            if not sums.count_back(latest):
+            if not sums.direct(latest):
                 send({"thinking": random.choice(planner.THINKING_LINES)})
             try:
                 reply, work, voiced, replaced, fixes, stats = work_out(messages, temperature, max_new_tokens, notes)

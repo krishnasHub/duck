@@ -55,11 +55,11 @@ def work_with_sums(generate, prompt, question=""):
 
     generate(prompt, max_tokens) returns the raw text and how many tokens it took. Stopping at the wrong line matters:
     everything after it was built on the wrong number. Returns the working, the tokens used and the corrections.
-    A plain count-back question is answered by code, so it uses no tokens here at all.
+    A question plain enough for code to read is answered by code, so it uses no tokens here at all.
     """
-    counted = sums.count_back(question)
-    if counted:
-        return counted, 0, ["counted back by code"]
+    solved = sums.direct(question)
+    if solved:
+        return solved, 0, ["worked out by code"]
     work, used, fixes = "", 0, []
     while True:
         piece, tokens = generate(prompt + work, min(WORK_TOKENS, WORK_TOKEN_LIMIT - used))
