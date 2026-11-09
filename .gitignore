@@ -33,3 +33,4 @@ personas/*/*
 !personas/*/plan_cases*.jsonl
 !personas/*/replay_*.txt
 personas/*/replay_*user*
+personas/*/plan_cases4.jsonl

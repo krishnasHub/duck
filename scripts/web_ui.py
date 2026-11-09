@@ -167,8 +167,8 @@ def work_out(messages, temperature, max_new_tokens, notes):
             text = llama.complete(prompt, None, 0.0, max_tokens)
             return text, llama.last_tokens
 
-        work, tokens_used, fixes = planner.work_with_sums(generate, render_prompt(tokenizer, planner.WORK_SYSTEM, planner.work_messages(window)), messages[-1]["content"])
-        voice_system = f"{with_memory(system, notes)}\n\n{planner.VOICE_NOTE}{work}"
+        work, tokens_used, fixes = planner.work_with_sums(generate, render_prompt(tokenizer, planner.work_system(messages[-1]["content"]), planner.work_messages(window)), messages[-1]["content"])
+        voice_system = f"{with_memory(system, notes)}\n\n{planner.voice_instructions(work, messages[-1]['content'])}"
         voiced = llama.complete(fit_prompt(voice_system, window), "everyday", min(temperature, 0.3), max_new_tokens)
         tokens_used += llama.last_tokens
     reply, replaced = planner.final_reply(voiced, work, messages)

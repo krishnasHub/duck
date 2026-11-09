@@ -82,16 +82,17 @@ def run(mode, messages):
         adapter = EVERYDAY if mode == "work_voice" else None
         reply, second = complete(render(f"{system}\n\n{VOICE_NOTE}{work}", messages), adapter, 0.3)
         return reply, first + second, work
-    if mode in ("planner", "planner_nocheck"):
+    if mode in ("planner", "planner_nocheck", "planner_noform"):
         def generate(prompt, max_tokens):
             return complete(prompt, max_tokens=max_tokens, temperature=0.0, strip=False)
 
-        if mode == "planner":
-            work, first, fixes = planner.work_with_sums(generate, render(planner.WORK_SYSTEM, planner.work_messages(messages)), messages[-1]["content"])
+        if mode != "planner_nocheck":
+            work_system = planner.WORK_SYSTEM if mode == "planner_noform" else planner.work_system(messages[-1]["content"])
+            work, first, fixes = planner.work_with_sums(generate, render(work_system, planner.work_messages(messages)), messages[-1]["content"])
         else:
             work, first = generate(render(planner.WORK_SYSTEM, planner.work_messages(messages)), planner.WORK_TOKENS)
             fixes = []
-        voiced, second = complete(render(f"{system}\n\n{planner.VOICE_NOTE}{work}", messages), EVERYDAY, 0.3)
+        voiced, second = complete(render(f"{system}\n\n{planner.voice_instructions(work, messages[-1]['content'])}", messages), EVERYDAY, 0.3)
         reply, why = planner.final_reply(voiced, work, messages)
         return reply, first + second, f"{work} || FIXED: {fixes} || VOICED: {voiced} || REPLACED: {why}"
     if mode == "one_pass":

@@ -5,6 +5,7 @@ Every number that matters is checked, and anything not plainly the shape must re
 import json
 import sys
 
+import planner
 import sums
 from common import ROOT
 
@@ -101,6 +102,39 @@ for name in ("plan_cases.jsonl", "plan_cases2.jsonl", "plan_cases3.jsonl"):
         answer = sums.compare_costs(case["q"]) or sums.packs(case["q"])
         if case["q"] not in already:
             check(f"{name} {case['id']} left to the model", answer is None, answer)
+
+# The voice step must never read its instructions aloud.
+WORK = "2 + 2 = 4\n\nCONCLUSION: The answer is 4."
+ECHO = "I've already worked this out, and the working below is correct. Give the user the answer and the numbers behind it. Keep every number exactly as it is."
+check("an echo of the instructions is replaced", planner.final_reply(ECHO, WORK, [])[0] == "The answer is 4.")
+check("an echo with no conclusion gets a fixed line", planner.final_reply(ECHO, "2 + 2 = 4", [])[0] == planner.LOST_THREAD)
+check("a normal reply is kept", planner.final_reply("It's 4, my dear, as sure as gold.", WORK, []) == ("It's 4, my dear, as sure as gold.", ""))
+check("ordinary phrases aren't taken for an echo", not planner.leaked_note("I'd say that in your own words, my dear, and keep your numbers close."))
+
+FORM = "SIDES: They outnumber us 5 to 1.\nPLAN: 1. All 20 men wait.\nCONCLUSION: At 5 to 1, don't fight directly. Send all 20 men by night to scatter the horses."
+FIGHT = [{"role": "user", "content": "100 soldiers are camped outside. We have 20 men. How do we stop them?"}]
+PLAN_SAID = "Send all 20 men by night to scatter the horses, my dear."
+check("a voiced plan is kept without the ratio", planner.final_reply(PLAN_SAID, FORM, FIGHT)[0] == PLAN_SAID)
+check("a force changed in words is replaced", planner.final_reply("Send two riders to the horses.", FORM, FIGHT)[1].startswith("new numbers"))
+check("a list read aloud is replaced", planner.final_reply("1. All 20 men wait. 2. They strike.", FORM, FIGHT)[1] == "read out a list")
+check("a reply that wanders off the plan is replaced", planner.final_reply("Ask for a truce, and offer them gold or a prisoner in return.", FORM, FIGHT)[1] == "changed the plan")
+check("mentioning having worked it out is replaced", planner.final_reply("I've worked this out for you.", FORM, FIGHT)[1] == "mentioned the working")
+check("a conclusion cut off mid-sentence loses the unfinished part", planner.conclusion("CONCLUSION: At 5 to 1, don't fight. Use the") == "At 5 to 1, don't fight.")
+check("a conclusion with no finished sentence counts as none", planner.conclusion("CONCLUSION: At 5 to 1, don't") == "")
+later = [{"role": "user", "content": "My 80 riders face 40 archers. What do I do?"}, {"role": "assistant", "content": "Ride round."}, {"role": "user", "content": "What if I only had 10 riders?"}]
+check("a follow-up tells the form which numbers count", "use the numbers from Now" in planner.work_messages(later)[0]["content"])
+unrelated = [{"role": "user", "content": "What would Gandalf say?"}, {"role": "assistant", "content": "Plenty."}, *FIGHT]
+check("earlier chat stays out of a new fight", "Gandalf" not in planner.work_messages(unrelated)[0]["content"])
+
+for case_id, question, wanted in [
+    ("battle", "About 200 men and 80 horses are camped outside my city walls. I only have 10 men. How do I capture their camp?", True),
+    ("bridge", "In my story, 100 raiders must cross a narrow one-man bridge, and I've got 5 archers. What's the best plan?", True),
+    ("followup", "What if I only had 10 knights?", True),
+    ("orcs", "In my game I have 3 wizards, and each can cast fire twice. Each fire spell kills 5 orcs. There are 30 orcs in the canyon. Can we kill them all?", False),
+    ("garrison", "In my game I have 40 soldiers guarding 3 gates. Each gate needs at least 15. Can I cover them all?", False),
+    ("budget", "I earn 3200 a month. Rent is 1400. How do I save 1000 a month?", False),
+]:
+    check(f"tactics route for {case_id}: {wanted}", planner.is_tactics(question) == wanted)
 
 print(f"{sum(results)} of {len(results)} passed")
 sys.exit(0 if all(results) else 1)
