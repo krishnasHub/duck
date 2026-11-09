@@ -21,7 +21,7 @@ OPEN_ASK = re.compile(
 )
 ASKS_FOR_HELP = re.compile(r"\b(?:something|anything) (?:i|we) can do|\bhelp me\b|\bstrategy\b|\bwhat (?:do|should|can) (?:i|we)\b|\bhow (?:do|should|can) (?:i|we)\b", re.I)
 NOTES = (
-    (re.compile(r"\bsiege (?:engines?|weapons?|towers?|machines?)\b", re.I), "The enemy has siege weapons."),
+    (re.compile(r"\bs(?:ie|ei)ge (?:engines?|weapons?|towers?|machines?)\b", re.I), "The enemy has siege weapons."),
     (re.compile(r"\bno help\b|\bhelp (?:isn'?t|is not) coming\b", re.I), "No help is coming."),
 )
 UNSTATED_LOSS_NOTE = "The enemy has taken losses, number unknown, so their count may be high."
@@ -82,7 +82,8 @@ def _plural_key(noun):
 
 
 def _is_asset(noun):
-    return not noun.lower().startswith("with ") and bool(re.fullmatch(ASSET_NOUNS, noun.split()[-1], re.I))
+    # "3 with horses" and "3 on horses" are people. "3 horses" are not.
+    return not noun.lower().startswith(("with ", "on ")) and bool(re.fullmatch(ASSET_NOUNS, noun.split()[-1], re.I))
 
 
 def _people(mine, rest_label):

@@ -28,6 +28,9 @@ check("reads their horses as theirs, not as fighters", sheet.their_things == {"h
 check("reads ours", sheet.ours == {"men": 20}, sheet)
 check("reads the ground", "woods" in sheet.ground and "walls" in sheet.ground, sheet)
 check("works out the ratio", "They outnumber us 5 to 1." in sheet.sheet(), sheet.sheet())
+riders = war.read(["How would you defend our citadel? About 100 elves are camped outside our walls.", "I have 10 men with me. 3 archers, 4 with shields and 3 on horses"])
+check("'3 on horses' are men, and the parts add up to 10", riders.ours == {"archers": 3, "with shields": 4, "on horses": 3} and not riders.our_things, riders)
+check("a misspelled 'seige' still counts as siege weapons", "The enemy has siege weapons." in war.read(["How should we fight 100 elves? We have 10 men.", "They're preping their seige weapons to break the walls"]).notes)
 
 check("we can outnumber them", "We outnumber them 6 to 1" in war.read(["In my game 15 guards hold a tower, and I've got 90 soldiers around it. How should I take it?"]).sheet())
 check("'in my game' isn't taken for our own count", war.read(["In my game 60 pirates are in a bay. I have 12 sailors. What should I do?"]).theirs == {"pirates": 60})
